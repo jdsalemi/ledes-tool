@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEDES 1998B Generator</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f4f8;color:#1a202c;min-height:100vh}
+header{background:#1a365d;color:white;padding:20px 32px}
+header h1{font-size:1.4rem;font-weight:700}
+header p{font-size:0.85rem;opacity:0.75;margin-top:4px}
+.container{max-width:960px;margin:0 auto;padding:28px 20px}
+.card{background:white;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,0.08);margin-bottom:20px;overflow:hidden}
+.card-header{background:#2d4a7a;color:white;padding:12px 20px;font-weight:600;font-size:0.9rem;display:flex;align-items:center;justify-content:space-between}
+.card-body{padding:20px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+label{display:block;font-size:0.8rem;font-weight:600;color:#4a5568;margin-bottom:5px}
+input,select{width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:6px;font-size:0.88rem;color:#1a202c}
+input[type=password]{letter-spacing:0.1em}
+.btn{padding:9px 20px;border-radius:7px;border:none;cursor:pointer;font-size:0.88rem;font-weight:600;margin:4px;display:inline-block}
+.btn-primary{background:#2b6cb0;color:white}.btn-primary:hover{background:#2c5282}
+.btn-success{background:#276749;color:white}.btn-success:hover{background:#1e4d34}
+.btn-outline{background:white;color:#2b6cb0;border:1.5px solid #2b6cb0}.btn-outline:hover{background:#ebf8ff}
+.btn-danger{background:white;color:#c53030;border:1.5px solid #c53030}.btn-danger:hover{background:#fff5f5}
+.btn-sm{padding:5px 12px;font-size:0.8rem}
+.msg{padding:10px 14px;border-radius:7px;font-size:0.85rem;margin-top:12px;white-space:pre-line}
+.msg-error{background:#fff5f5;border:1px solid #feb2b2;color:#c53030}
+.msg-success{background:#f0fff4;border:1px solid #9ae6b4;color:#276749}
+.msg-info{background:#ebf8ff;border:1px solid #90cdf4;color:#2b6cb0}
+.msg-warn{background:#fffbeb;border:1px solid #fbd38d;color:#744210}
+.note-blue{font-size:0.78rem;color:#2b6cb0;background:#ebf8ff;border:1px solid #90cdf4;border-radius:6px;padding:8px 12px;margin-top:8px}
+table{width:100%;border-collapse:collapse;font-size:0.8rem}
+th{background:#edf2f7;padding:8px 10px;text-align:left;font-weight:600;color:#4a5568;white-space:nowrap}
+td{padding:7px 10px;border-bottom:1px solid #f0f4f8;color:#2d3748}
+tr:hover td{background:#f7fafc}
+.section-title{font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#718096;margin:12px 0 8px}
+.preview-box{background:#1a202c;color:#68d391;font-family:monospace;font-size:0.72rem;padding:14px;border-radius:7px;overflow-x:auto;white-space:pre;max-height:200px;overflow-y:auto;margin-top:12px}
+.summary{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px}
+.stat{background:#f7fafc;border-radius:7px;padding:10px 16px;flex:1;min-width:110px}
+.stat .val{font-size:1.3rem;font-weight:700;color:#2b6cb0}
+.stat .lbl{font-size:0.75rem;color:#718096;margin-top:2px}
+.matter-table-wrap{margin-top:14px;max-height:260px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:7px}
+.divider{border:none;border-top:1px solid #e2e8f0;margin:16px 0}
+.pill-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+.pill{padding:4px 14px;border-radius:20px;font-size:0.78rem;font-weight:600;background:#edf2f7;color:#4a5568}
+.pill.ok{background:#c6f6d5;color:#276749}
+.pill.err{background:#fed7d7;color:#c53030}
+.conn-row{display:flex;align-items:center;gap:8px;font-size:0.85rem;font-weight:600}
+.dot{width:10px;height:10px;border-radius:50%;background:#e53e3e;flex-shrink:0}
+.dot.green{background:#38a169}
+.actions{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px}
+.client-form{background:#f7fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:14px}
+.active-client{background:#f0fff4;border:1px solid #9ae6b4;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:0.85rem}
+</style>
+</head>
+<body>
+<header>
+  <h1>&#9878;&#65039; LEDES 1998B Generator</h1>
+  <p>Live Google Sheets &middot; Flat fee billing codes &middot; USPTO expenses &middot; Auto-sequenced invoice numbers</p>
+</header>
+<div class="container">
+
+  <!-- CONNECTION -->
+  <div class="card">
+    <div class="card-header">
+      <span>&#128295; Google Sheets Connection</span>
+      <div class="conn-row"><div class="dot" id="conn-dot"></div><span id="conn-label">Not connected</span></div>
+    </div>
+    <div class="card-body">
+      <div style="margin-bottom:14px">
+        <label>Google API Key (shared across all clients)</label>
+        <input id="api_key" type="password" placeholder="AIza...">
+      </div>
+      <div style="margin-bottom:14px">
+        <label>Client</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="client_select" style="flex:1" onchange="onClientSelect()">
+            <option value="">&#8212; Select a client &#8212;</option>
+          </select>
+          <button class="btn btn-outline btn-sm" onclick="showClientForm()">+ Add</button>
+          <button class="btn btn-danger btn-sm" id="remove-btn" style="display:none" onclick="removeClient()">&#128465; Remove</button>
+        </div>
+      </div>
+      <div id="client-form" style="display:none" class="client-form">
+        <div class="section-title">Add New Client</div>
+        <div class="grid2" style="margin-bottom:10px">
+          <div><label>Client Name *</label><input id="cf_name" placeholder="e.g. Acme Corp"></div>
+          <div><label>Sheet ID *</label><input id="cf_sheet" placeholder="Sheet ID from URL"></div>
+        </div>
+        <div class="grid2" style="margin-bottom:10px">
+          <div><label>Default Timekeeper ID</label><input id="cf_tk" placeholder="e.g. NJM"></div>
+          <div><label>Default Client ID</label><input id="cf_cid" placeholder="e.g. CLIENT001"></div>
+        </div>
+        <div class="grid2" style="margin-bottom:10px">
+          <div><label>Client Billing Address</label><input id="cf_client_addr" placeholder="e.g. 123 Main St, San Francisco CA 94105"></div>
+          <div><label>Law Firm Name</label><input id="cf_firm_name" placeholder="e.g. Smith & Jones LLP"></div>
+        </div>
+        <div class="grid2" style="margin-bottom:10px">
+          <div><label>Law Firm Address</label><input id="cf_firm_addr" placeholder="e.g. 456 Park Ave, New York NY 10022"></div>
+          <div style="display:flex;align-items:center;gap:8px;padding-top:22px">
+            <input type="checkbox" id="cf_requires_pdf" style="width:auto;margin:0">
+            <label style="margin:0;font-weight:600;color:#2d3748">Generate PDF invoice alongside LEDES file</label>
+          </div>
+        </div>
+        <div>
+          <button class="btn btn-primary btn-sm" onclick="saveClient()">Save Client</button>
+          <button class="btn btn-outline btn-sm" onclick="hideClientForm()">Cancel</button>
+        </div>
+        <div id="cf-status"></div>
+      </div>
+      <div id="active-client" style="display:none" class="active-client">
+        <strong id="ac-name"></strong><br>
+        <span style="color:#4a5568;font-size:0.8rem">Sheet ID: <code id="ac-sheet"></code></span>
+      </div>
+      <button class="btn btn-outline" onclick="connectSheet()">Connect &amp; Verify Tabs</button>
+      <div id="connect-status"></div>
+      <div class="pill-row" id="sheet-pills" style="display:none">
+        <div class="pill" id="pill-fees">Fees</div>
+        <div class="pill" id="pill-uspto">USPTO Fees</div>
+        <div class="pill" id="pill-schedule">Fee Schedule</div>
+        <div class="pill" id="pill-timekeepers">Timekeepers</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INVOICE DETAILS -->
+  <div class="card">
+    <div class="card-header">&#128203; Invoice Details</div>
+    <div class="card-body">
+      <div class="grid3" style="margin-bottom:14px">
+        <div><label>Invoice Date *</label><input id="inv_date" type="date"></div>
+        <div><label>Billing Start Date *</label><input id="bill_start" type="date"></div>
+        <div><label>Billing End Date *</label><input id="bill_end" type="date"></div>
+      </div>
+      <div class="grid3">
+        <div><label>Starting Invoice Number *</label><input id="inv_format" placeholder="INV202601"></div>
+        <div><label>Default Timekeeper ID</label><input id="default_tk" placeholder="e.g. NJM"></div>
+        <div><label>Currency</label><select id="currency"><option>USD</option><option>CAD</option><option>GBP</option><option>EUR</option></select></div>
+      </div>
+      <div id="po-wrap" style="display:none;margin-top:14px">
+        <div style="max-width:320px">
+          <label>PO Number <span style="font-weight:400;color:#718096">(Okta &#8212; quarterly)</span></label>
+          <input id="po_number" placeholder="e.g. PO-2026-Q1">
+        </div>
+      </div>
+      <div class="note-blue" style="margin-top:12px">&#128197; Pulls unbilled rows matching the invoice date month. Invoice numbers auto-sequence from the starting number.</div>
+    </div>
+  </div>
+
+  <!-- GENERATE -->
+  <div class="card">
+    <div class="card-header">&#9881;&#65039; Generate</div>
+    <div class="card-body">
+      <div class="actions">
+        <button class="btn btn-primary" onclick="loadAndPreview()">&#128260; Load This Month's Data</button>
+        <button class="btn btn-primary" onclick="generate()">&#9881;&#65039; Generate LEDES Files</button>
+        <button class="btn btn-success" id="dl-btn" onclick="downloadFiles()" style="display:none">&#8681; Download Files</button>
+        <button class="btn btn-success" id="wb-btn" onclick="markBilled()" style="display:none">&#9989; Mark as Billed</button>
+      </div>
+      <div id="gen-status"></div>
+      <div id="data-preview"></div>
+      <div id="summary" style="display:none">
+        <div class="summary" id="summary-stats"></div>
+        <div class="section-title">Matter Breakdown</div>
+        <div class="matter-table-wrap"><table id="matter-breakdown"></table></div>
+        <div class="section-title">Preview &#8212; First Matter File</div>
+        <div class="preview-box" id="preview-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ACCRUALS -->
+  <div class="card" id="accruals-card" style="display:none">
+    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between">
+      <span>&#128200; Monthly Accruals</span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button onclick="accrualYearOffset--; refreshAccruals()" style="background:rgba(255,255,255,0.2);border:none;color:white;font-size:1.1rem;cursor:pointer;border-radius:4px;padding:2px 8px">&#8249;</button>
+        <span id="accrual-year-label" style="font-size:0.95rem;min-width:40px;text-align:center"></span>
+        <button onclick="accrualYearOffset++; refreshAccruals()" style="background:rgba(255,255,255,0.2);border:none;color:white;font-size:1.1rem;cursor:pointer;border-radius:4px;padding:2px 8px">&#8250;</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div style="font-size:0.75rem;color:#718096;margin-bottom:10px">
+        <span style="display:inline-block;width:10px;height:10px;background:#276749;border-radius:2px;margin-right:4px"></span>Billed &nbsp;
+        <span style="display:inline-block;width:10px;height:10px;background:#90cdf4;border-radius:2px;margin-right:4px"></span>Unbilled
+      </div>
+      <div id="accruals-content"></div>
+    </div>
+  </div>
+
+</div>
+<script>
+// ── STATE ─────────────────────────────────────────────────────
+var timekeepers = {};
+var feeSchedule = {};
+var feeScheduleByDesc = {};  // Fee Schedule indexed by line_item_desc (lowercase) for USPTO lookup
+var accrualYearOffset = 0;   // 0 = current year, -1 = last year, etc.
+var accrualBaseYear = null;   // set when Load is run
+var feeEntries = [];
+var usptoEntries = [];
+var generatedFiles = [];
+var billedMeta = { feesHeaders: [], usptoHeaders: [], rows: [] };
+var clients = [];
+var activeClient = null;
+
+// ── CLIENT MANAGEMENT ─────────────────────────────────────────
+function loadClients() {
+  try { clients = JSON.parse(localStorage.getItem('ledes_clients') || '[]'); } catch(e) { clients = []; }
+}
+function saveClients() {
+  localStorage.setItem('ledes_clients', JSON.stringify(clients));
+}
+function renderDropdown() {
+  var sel = document.getElementById('client_select');
+  var cur = sel.value;
+  sel.innerHTML = '<option value="">&#8212; Select a client &#8212;</option>';
+  clients.forEach(function(c, i) {
+    var opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = c.name;
+    sel.appendChild(opt);
+  });
+  if (cur !== '') sel.value = cur;
+}
+function onClientSelect() {
+  var idx = document.getElementById('client_select').value;
+  if (idx === '') {
+    activeClient = null;
+    document.getElementById('active-client').style.display = 'none';
+    document.getElementById('remove-btn').style.display = 'none';
+    document.getElementById('default_tk').value = '';
+    resetConnection();
+    return;
+  }
+  activeClient = clients[parseInt(idx)];
+  document.getElementById('ac-name').textContent = activeClient.name;
+  document.getElementById('ac-sheet').textContent = activeClient.sheetId;
+  document.getElementById('active-client').style.display = 'block';
+  document.getElementById('remove-btn').style.display = 'inline-block';
+  document.getElementById('default_tk').value = activeClient.defaultTk || '';
+  // Show PO field only for Okta
+  var poWrap = document.getElementById('po-wrap');
+  if (activeClient.name.toLowerCase().indexOf('okta') >= 0) {
+    poWrap.style.display = 'block';
+  } else {
+    poWrap.style.display = 'none';
+    document.getElementById('po_number').value = '';
+  }
+  // FIX: removed duplicate resetConnection() call
+  resetConnection();
+}
+function showClientForm() {
+  document.getElementById('cf_name').value = '';
+  document.getElementById('cf_sheet').value = '';
+  document.getElementById('cf_tk').value = '';
+  document.getElementById('cf_cid').value = '';
+  document.getElementById('cf_client_addr').value = '';
+  document.getElementById('cf_firm_name').value = '';
+  document.getElementById('cf_firm_addr').value = '';
+  document.getElementById('cf_requires_pdf').checked = false;
+  document.getElementById('cf-status').innerHTML = '';
+  document.getElementById('client-form').style.display = 'block';
+}
+function hideClientForm() {
+  document.getElementById('client-form').style.display = 'none';
+}
+function saveClient() {
+  var name       = document.getElementById('cf_name').value.trim();
+  var sheetId    = document.getElementById('cf_sheet').value.trim();
+  var defaultTk  = document.getElementById('cf_tk').value.trim();
+  var defaultCid = document.getElementById('cf_cid').value.trim();
+  var clientAddr = document.getElementById('cf_client_addr').value.trim();
+  var firmName   = document.getElementById('cf_firm_name').value.trim();
+  var firmAddr   = document.getElementById('cf_firm_addr').value.trim();
+  var reqPdf     = document.getElementById('cf_requires_pdf').checked;
+  if (!name || !sheetId) {
+    document.getElementById('cf-status').innerHTML = '<div class="msg msg-error">Client Name and Sheet ID are required.</div>';
+    return;
+  }
+  clients.push({ name: name, sheetId: sheetId, defaultTk: defaultTk, defaultCid: defaultCid,
+                 clientAddr: clientAddr, firmName: firmName, firmAddr: firmAddr, requiresPdf: reqPdf });
+  saveClients();
+  renderDropdown();
+  document.getElementById('client_select').value = clients.length - 1;
+  onClientSelect();
+  hideClientForm();
+}
+function removeClient() {
+  var idx = document.getElementById('client_select').value;
+  if (idx === '') return;
+  if (!confirm('Remove "' + clients[parseInt(idx)].name + '"?')) return;
+  clients.splice(parseInt(idx), 1);
+  saveClients();
+  renderDropdown();
+  document.getElementById('client_select').value = '';
+  onClientSelect();
+}
+function resetConnection() {
+  document.getElementById('conn-dot').classList.remove('green');
+  document.getElementById('conn-label').textContent = 'Not connected';
+  document.getElementById('sheet-pills').style.display = 'none';
+  document.getElementById('connect-status').innerHTML = '';
+  document.getElementById('data-preview').innerHTML = '';
+  document.getElementById('summary').style.display = 'none';
+  document.getElementById('accruals-card').style.display = 'none';
+  document.getElementById('dl-btn').style.display = 'none';
+  document.getElementById('wb-btn').style.display = 'none';
+}
+
+// ── HELPERS ───────────────────────────────────────────────────
+function getSheetId() {
+  return activeClient ? activeClient.sheetId : '';
+}
+function fk(obj, cands) {
+  if (!obj) return null;
+  for (var i = 0; i < cands.length; i++) if (cands[i] in obj) return cands[i];
+  return null;
+}
+function money(n) {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function parseDate(d) {
+  if (!d || String(d).trim() === '') return null;
+  var s = String(d).trim();
+  if (/^\d{8}$/.test(s)) {
+    return new Date(parseInt(s.substring(0,4)), parseInt(s.substring(4,6))-1, parseInt(s.substring(6,8)));
+  }
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    var p = s.split('-').map(Number);
+    return new Date(p[0], p[1]-1, p[2]);
+  }
+  var slash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slash) return new Date(parseInt(slash[3]), parseInt(slash[1])-1, parseInt(slash[2]));
+  return null;
+}
+function fmt(d) {
+  if (!d || String(d).trim() === '') return '';
+  var s = String(d).trim();
+  if (/^\d{8}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.replace(/-/g,'').substring(0,8);
+  var slash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (slash) {
+    var m = slash[1], dy = slash[2], yr = slash[3];
+    if (yr.length === 2) yr = (parseInt(yr) < 50 ? '20' : '19') + yr;
+    if (yr.length === 3) yr = '2' + yr;
+    return yr + m.padStart(2,'0') + dy.padStart(2,'0');
+  }
+  var p = parseDate(s);
+  if (p) return p.getFullYear() + String(p.getMonth()+1).padStart(2,'0') + String(p.getDate()).padStart(2,'0');
+  return '';
+}
+function normKey(k) { return k.trim().toLowerCase().replace(/[\s\-\/]+/g,'_'); }
+function rowsFromRaw(raw) {
+  var vals = raw.values || [];
+  if (!vals.length) return [];
+  var headers = vals[0].map(normKey);
+  return vals.slice(1).map(function(r) {
+    var o = {};
+    headers.forEach(function(h,i) { o[h] = (r[i] || '').toString().trim(); });
+    return o;
+  });
+}
+function showStatus(id, type, msg) {
+  var cls = { error:'msg-error', success:'msg-success', warn:'msg-warn', info:'msg-info' }[type] || 'msg-info';
+  document.getElementById(id).innerHTML = '<div class="msg ' + cls + '">' + msg + '</div>';
+}
+function setPill(id, ok) {
+  var el = document.getElementById(id);
+  el.classList.toggle('ok', ok);
+  el.classList.toggle('err', !ok);
+}
+
+// ── SHEET API ─────────────────────────────────────────────────
+async function apiGet(range) {
+  var key = document.getElementById('api_key').value.trim();
+  var sid = getSheetId();
+  if (!sid) throw new Error('No client selected.');
+  var url = 'https://sheets.googleapis.com/v4/spreadsheets/' + sid + '/values/' + encodeURIComponent(range) + '?key=' + key;
+  var r = await fetch(url);
+  if (!r.ok) { var e = await r.json(); throw new Error(e.error && e.error.message ? e.error.message : 'API error ' + r.status); }
+  return r.json();
+}
+
+// ── CONNECT ───────────────────────────────────────────────────
+async function connectSheet() {
+  var key = document.getElementById('api_key').value.trim();
+  var sid = getSheetId();
+  if (!key) return showStatus('connect-status', 'error', 'Enter your API Key.');
+  if (!sid) return showStatus('connect-status', 'error', 'Select or add a client first.');
+  showStatus('connect-status', 'info', 'Connecting...');
+  try {
+    var res = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + sid + '?key=' + key);
+    var meta = await res.json();
+    if (meta.error) throw new Error(meta.error.message);
+    var actual = (meta.sheets || []).map(function(s) { return s.properties.title.trim().toLowerCase(); });
+    var tabs = [['Fees','pill-fees'],['USPTO Fees','pill-uspto'],['Fee Schedule','pill-schedule'],['Timekeepers','pill-timekeepers']];
+    var allOk = true;
+    tabs.forEach(function(t) {
+      var ok = actual.indexOf(t[0].toLowerCase()) >= 0;
+      setPill(t[1], ok);
+      if (!ok) allOk = false;
+    });
+    document.getElementById('sheet-pills').style.display = 'flex';
+    document.getElementById('conn-dot').classList.toggle('green', allOk);
+    document.getElementById('conn-label').textContent = allOk ? 'Connected' : 'Partial';
+    showStatus('connect-status', allOk ? 'success' : 'warn', allOk ? 'All tabs found. Fill in invoice details and click Load.' : 'Some tabs missing - check names match exactly.');
+  } catch(e) {
+    showStatus('connect-status', 'error', 'Connection failed: ' + e.message);
+  }
+}
+
+// ── LOAD ──────────────────────────────────────────────────────
+async function loadAndPreview() {
+  var invDate = document.getElementById('inv_date').value;
+  if (!invDate) return showStatus('gen-status', 'error', 'Set an Invoice Date first.');
+  var parts = invDate.split('-').map(Number);
+  var yr = parts[0], mo = parts[1];
+  var monthLabel = new Date(yr, mo-1, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
+  showStatus('gen-status', 'info', 'Loading...');
+  document.getElementById('data-preview').innerHTML = '';
+
+  try {
+    var results = await Promise.all([
+      apiGet('Fees!A:Z'), apiGet('USPTO Fees!A:Z'),
+      apiGet('Fee Schedule!A:F'), apiGet('Timekeepers!A:Z')
+    ]);
+    var feesRaw = results[0], usptoRaw = results[1], schedRaw = results[2], tkRaw = results[3];
+
+    // Timekeepers
+    var tkRows = rowsFromRaw(tkRaw);
+    timekeepers = {};
+    if (tkRows.length) {
+      var idK = fk(tkRows[0], ['timekeeper_id','id','tk_id']);
+      var nmK = fk(tkRows[0], ['name','timekeeper_name']);
+      var clK = fk(tkRows[0], ['classification','class','level','title']);
+      tkRows.forEach(function(r) { if (idK && r[idK]) timekeepers[r[idK]] = { name: nmK ? r[nmK] : '', classification: clK ? r[clK] : '' }; });
+    }
+
+    // Fee Schedule — keyed by code (col A) and also by line_item_desc (col C) for USPTO lookup
+    feeSchedule = {};
+    feeScheduleByDesc = {};
+    var sv = schedRaw.values || [];
+    for (var i = 1; i < sv.length; i++) {
+      var row = sv[i];
+      if (!row || !row[0]) continue;
+      var code = row[0].trim();
+      if (!code) continue;
+      var entry = {
+        code:           code,
+        invoice_desc:   (row[1] || '').trim(),
+        line_item_desc: (row[2] || '').trim(),
+        amount:         parseFloat((row[3] || '0').replace(/[$,]/g,'')) || 0,
+        task_code:      (row[4] || '').trim(),
+        activity_code:  (row[5] || '').trim()
+      };
+      feeSchedule[code] = entry;
+      // Index by lowercase line_item_desc for USPTO description matching
+      if (entry.line_item_desc) {
+        feeScheduleByDesc[entry.line_item_desc.toLowerCase()] = entry;
+      }
+    }
+
+    // Fees tab
+    billedMeta.feesHeaders = (feesRaw.values || [[]])[0] || [];
+    var allFees = rowsFromRaw(feesRaw);
+    feeEntries = [];
+    if (allFees.length) {
+      var mK  = fk(allFees[0], ['matter_id','matter id','matter']);
+      var cmK = fk(allFees[0], ['client_matter_id','client matter id','client_matter','ref']);
+      var ciK = fk(allFees[0], ['client_id','client id','client']);
+      var bcK = fk(allFees[0], ['billing_code','billing code','code']);
+      var tkK = fk(allFees[0], ['timekeeper_id','timekeeper id','tk_id']);
+      var wdK = fk(allFees[0], ['work_date','work date','date_completed','date completed']);
+      var inK = fk(allFees[0], ['invoice_number','invoice number','inv_num']);
+      var blK = fk(allFees[0], ['billed','status','invoiced']);
+      var lfmK  = fk(allFees[0], ['law_firm_matter_id','law firm matter id','lf_matter_id','firm_matter_id']);
+      var refK  = fk(allFees[0], ['reference_url','reference url','ref_url','drive_link','drive link','verification_link','email_link']);
+      allFees.forEach(function(r, i) {
+        if (!mK || !r[mK] || !bcK || !r[bcK]) return;
+        var billed = (r[blK] || '').toLowerCase();
+        if (['yes','true','\u2713','x'].indexOf(billed) >= 0) return;
+        var wd = wdK ? r[wdK] : '';
+        feeEntries.push({ _row: i+2, matter_id: r[mK], law_firm_matter_id: lfmK ? r[lfmK] : '', client_matter_id: cmK ? r[cmK] : '', client_id: ciK ? r[ciK] : '', billing_code: r[bcK], timekeeper_id: tkK ? r[tkK] : '', work_date: wd, invoice_number: inK ? r[inK] : '', reference_url: refK ? r[refK] : '' });
+      });
+    }
+
+    // USPTO tab
+    billedMeta.usptoHeaders = (usptoRaw.values || [[]])[0] || [];
+    var allUspto = rowsFromRaw(usptoRaw);
+    usptoEntries = [];
+    if (allUspto.length) {
+      var umK  = fk(allUspto[0], ['matter_id','matter id','matter']);
+      var ucmK = fk(allUspto[0], ['client_matter_id','client matter id','client_matter','ref']);
+      var uciK = fk(allUspto[0], ['client_id','client id','client']);
+      var udsK = fk(allUspto[0], ['description','desc','fee_type','fee type','name']);
+      var uamK = fk(allUspto[0], ['amount','fee','cost','amt']);
+      var uecK = fk(allUspto[0], ['expense_code','expense code','utbms_code']);
+      var uwdK = fk(allUspto[0], ['work_date','work date','date_completed','date completed']);
+      var uinK = fk(allUspto[0], ['invoice_number','invoice number','inv_num']);
+      var ublK = fk(allUspto[0], ['billed','status','invoiced']);
+      allUspto.forEach(function(r, i) {
+        if (!umK || !r[umK] || !uamK || !r[uamK]) return;
+        var billed = (r[ublK] || '').toLowerCase();
+        if (['yes','true','\u2713','x'].indexOf(billed) >= 0) return;
+        var wd = uwdK ? r[uwdK] : '';
+        var ulfmK = fk(allUspto[0], ['law_firm_matter_id','law firm matter id','lf_matter_id','firm_matter_id']);
+        usptoEntries.push({ _row: i+2, matter_id: r[umK], law_firm_matter_id: ulfmK ? r[ulfmK] : '', client_matter_id: ucmK ? r[ucmK] : '', client_id: uciK ? r[uciK] : '', description: udsK ? r[udsK] : 'USPTO Fee', amount: parseFloat(r[uamK]) || 0, expense_code: uecK ? r[uecK] : 'E112', work_date: wd, invoice_number: uinK ? r[uinK] : '' });
+      });
+    }
+
+    // Build preview
+    var schedKeys = Object.keys(feeSchedule);
+    var html = '<div style="margin:14px 0 6px;font-size:0.85rem;color:#4a5568">Loaded all unbilled rows (invoicing in <strong>' + monthLabel + '</strong>)</div>';
+
+    html += '<div class="section-title">Fee Schedule (' + schedKeys.length + ' codes)</div><div style="overflow-x:auto"><table><tr><th>Code</th><th>Invoice Description</th><th>Line Item Description</th><th>Amount</th></tr>';
+    schedKeys.slice(0,6).forEach(function(code) {
+      var fs = feeSchedule[code];
+      html += '<tr><td><strong>' + code + '</strong></td><td>' + (fs.invoice_desc || '<span style="color:red">EMPTY</span>') + '</td><td>' + (fs.line_item_desc || '').substring(0,40) + '</td><td>$' + money(fs.amount) + '</td></tr>';
+    });
+    html += '</table></div>';
+
+    if (feeEntries.length) {
+      html += '<div class="section-title" style="margin-top:14px">Fees (' + feeEntries.length + ' rows)</div><div style="overflow-x:auto"><table><tr><th>Matter ID</th><th>Client ID</th><th>Billing Code</th><th>Invoice Desc</th><th>Amount</th><th>Work Date</th><th>TK</th><th>Ref</th></tr>';
+      feeEntries.forEach(function(r) {
+        var fs    = feeSchedule[r.billing_code];
+        var refHtml = r.reference_url
+          ? '<a href="' + r.reference_url + '" target="_blank" title="Open verification email/doc" style="color:#2b6cb0;text-decoration:none;font-size:1.1rem">&#128279;</a>'
+          : '<span style="color:#cbd5e0">&#8212;</span>';
+        html += '<tr><td>' + r.matter_id + '</td><td>' + r.client_id + '</td><td><strong>' + r.billing_code + '</strong></td><td>' + (fs ? fs.invoice_desc || '<span style="color:orange">Empty</span>' : '<span style="color:red">Not found</span>') + '</td><td>' + (fs ? '$' + money(fs.amount) : '&#8212;') + '</td><td>' + (r.work_date || '&#8212;') + '</td><td>' + (r.timekeeper_id || '(default)') + '</td><td style="text-align:center">' + refHtml + '</td></tr>';
+      });
+      html += '</table></div>';
+    } else {
+      html += '<div class="msg msg-warn" style="margin-top:12px">No unbilled fee rows found for ' + monthLabel + '. Check Work Date format and Billed column.</div>';
+    }
+
+    if (usptoEntries.length) {
+      html += '<div class="section-title" style="margin-top:14px">USPTO Fees (' + usptoEntries.length + ' rows)</div><div style="overflow-x:auto"><table><tr><th>Matter ID</th><th>Description</th><th>Amount</th><th>Expense Code</th><th>Work Date</th></tr>';
+      usptoEntries.forEach(function(r) {
+        html += '<tr><td>' + r.matter_id + '</td><td>' + r.description + '</td><td>$' + money(r.amount) + '</td><td>' + r.expense_code + '</td><td>' + (r.work_date || '&#8212;') + '</td></tr>';
+      });
+      html += '</table></div>';
+    }
+
+    document.getElementById('data-preview').innerHTML = html;
+    showStatus('gen-status', 'success', 'Loaded ' + feeEntries.length + ' fee row(s) and ' + usptoEntries.length + ' USPTO row(s) for ' + monthLabel + '.');
+    accrualBaseYear = yr;
+    accrualYearOffset = 0;
+    loadAccruals(yr);
+
+  } catch(e) {
+    showStatus('gen-status', 'error', 'Failed to load: ' + e.message);
+    console.error(e);
+  }
+}
+
+// ── INVOICE NUMBER ────────────────────────────────────────────
+function nextInvNum(base, offset) {
+  var m = base.match(/^(.*?)(\d+)$/);
+  if (!m) return base + (offset + 1);
+  var num = parseInt(m[2]) + offset;
+  return m[1] + String(num).padStart(m[2].length, '0');
+}
+
+// ── GENERATE ─────────────────────────────────────────────────
+function generate() {
+  var invDate   = document.getElementById('inv_date').value;
+  var billStart = document.getElementById('bill_start').value;
+  var billEnd   = document.getElementById('bill_end').value;
+  var invFormat = document.getElementById('inv_format').value.trim();
+  var defaultTK = document.getElementById('default_tk').value.trim() || (activeClient ? activeClient.defaultTk || '' : '');
+  var errors = [];
+  if (!invDate)   errors.push('Invoice Date');
+  if (!billStart) errors.push('Billing Start Date');
+  if (!billEnd)   errors.push('Billing End Date');
+  if (!invFormat) errors.push('Starting Invoice Number');
+  if (!feeEntries.length && !usptoEntries.length) errors.push('No entries loaded - click Load first');
+  if (errors.length) return showStatus('gen-status', 'error', 'Missing: ' + errors.join(', '));
+
+  var poNumber = document.getElementById('po_number').value.trim();
+  var poPrefix = poNumber ? 'PO#' + poNumber + ' - ' : '';
+
+  // FIX: declare allMatterIds as a local variable (was missing, causing ReferenceError)
+  var allMatterIds = [];
+  var seen = {};
+  feeEntries.concat(usptoEntries).forEach(function(e) {
+    if (!seen[e.matter_id]) { seen[e.matter_id] = true; allMatterIds.push(e.matter_id); }
+  });
+
+  generatedFiles = [];
+  billedMeta.rows = [];
+  var warnings = [], results = [];
+  var grandTotal = 0, grandLines = 0, seq = 0;
+
+  var HEADER = 'INVOICE_DATE|INVOICE_NUMBER|CLIENT_ID|LAW_FIRM_MATTER_ID|INVOICE_TOTAL|BILLING_START_DATE|BILLING_END_DATE|INVOICE_DESCRIPTION|LINE_ITEM_NUMBER|EXP/FEE/INV_ADJ_TYPE|LINE_ITEM_NUMBER_OF_UNITS|LINE_ITEM_ADJUSTMENT_AMOUNT|LINE_ITEM_TOTAL|LINE_ITEM_DATE|LINE_ITEM_TASK_CODE|LINE_ITEM_EXPENSE_CODE|LINE_ITEM_ACTIVITY_CODE|TIMEKEEPER_ID|LINE_ITEM_DESCRIPTION|LAW_FIRM_ID|LINE_ITEM_UNIT_COST|TIMEKEEPER_NAME|TIMEKEEPER_CLASSIFICATION|CLIENT_MATTER_ID[]';
+
+  allMatterIds.forEach(function(mid) {
+    var fees   = feeEntries.filter(function(e) { return e.matter_id === mid; });
+    var usptof = usptoEntries.filter(function(e) { return e.matter_id === mid; });
+    var anchor = fees[0] || usptof[0];
+    var cm   = anchor.client_matter_id || mid;
+    var ci   = anchor.client_id || '';
+    var lfmid = anchor.law_firm_matter_id || mid;  // Law Firm Matter ID for LEDES field 4
+    var invNum = nextInvNum(invFormat, seq++);
+    var firstFS = fees[0] ? feeSchedule[fees[0].billing_code] : null;
+    var invDesc = poPrefix + (firstFS ? firstFS.invoice_desc : '');
+    var total = 0, lineNum = 0, lines = [];
+
+    fees.forEach(function(e) {
+      var fs = feeSchedule[e.billing_code];
+      if (!fs) { warnings.push('Code "' + e.billing_code + '" not in Fee Schedule (' + mid + ') - skipped'); return; }
+      var tkId = e.timekeeper_id || defaultTK;
+      if (!tkId) { warnings.push('No timekeeper for ' + mid + ' - skipped'); return; }
+      var tk = timekeepers[tkId] || { name: '', classification: '' };
+      // Allow client-specific overrides for timekeeper classification
+      var tkClass = tk.classification;
+      if (activeClient && activeClient.name.toLowerCase().indexOf('salesforce') >= 0) {
+        tkClass = 'FLTFE';
+      }
+      lineNum++; total += fs.amount;
+      lines.push([
+        fmt(invDate), invNum, ci, lfmid, '__T__',
+        fmt(billStart), fmt(billEnd), invDesc,
+        lineNum, 'F', '1', '', fs.amount.toFixed(2),
+        fmt(e.work_date) || fmt(invDate),
+        fs.task_code || '', '', fs.activity_code || '',
+        tkId, fs.line_item_desc || '', lfmid,
+        fs.amount.toFixed(2), tk.name, tkClass, cm
+      ].join('|') + '[]');
+      billedMeta.rows.push({ sheet: 'Fees', row: e._row, invNum: invNum });
+    });
+
+    usptof.forEach(function(e) {
+      var expCode  = e.expense_code || 'E112';
+      var expAmt   = e.amount;
+      var taskCode = '';
+
+      // For Salesforce: look up the Fee Schedule by matching description → line_item_desc.
+      // This pulls the client-specific expense code (col A), task code (col E), and amount.
+      // Falls back to the hardcoded SALESFORCE_CODES array if no Fee Schedule match found.
+      if (activeClient && activeClient.name.toLowerCase().indexOf('salesforce') >= 0) {
+        var descKey = e.description.toLowerCase().trim();
+        var fsMatch = feeScheduleByDesc[descKey];
+        if (fsMatch) {
+          expCode  = fsMatch.code;
+          taskCode = fsMatch.task_code || '';
+          if (fsMatch.amount > 0) expAmt = fsMatch.amount;
+        } else {
+          // Fallback: hardcoded array (handles partial/fuzzy descriptions)
+          var sfMatch = getSalesforceCode(e.description);
+          if (sfMatch) {
+            expCode = sfMatch.code;
+            if (sfMatch.amount !== null) expAmt = sfMatch.amount;
+          }
+        }
+      }
+
+      lineNum++; total += expAmt;
+      lines.push([
+        fmt(invDate), invNum, ci, lfmid, '__T__',
+        fmt(billStart), fmt(billEnd), invDesc,
+        lineNum, 'E', '1', '', expAmt.toFixed(2),
+        fmt(e.work_date) || fmt(invDate),
+        taskCode, expCode, '',
+        '', e.description, lfmid,
+        expAmt.toFixed(2), '', '', cm
+      ].join('|') + '[]');
+      billedMeta.rows.push({ sheet: 'USPTO Fees', row: e._row, invNum: invNum });
+    });
+
+    if (!lines.length) return;
+    var t = total.toFixed(2);
+    var ledesContent = ['LEDES1998B[]', HEADER].concat(lines.map(function(l) { return l.replace('__T__', t); })).join('\n');
+    generatedFiles.push({
+      filename:   'LEDES_' + invNum + '.txt',
+      content:    ledesContent,
+      // PDF metadata — populated if client requires a PDF invoice
+      pdfMeta: (activeClient && activeClient.requiresPdf) ? {
+        invNum:     invNum,
+        invDate:    invDate,
+        billStart:  billStart,
+        billEnd:    billEnd,
+        clientName: activeClient.name,
+        clientAddr: activeClient.clientAddr || '',
+        firmName:   activeClient.firmName   || '',
+        firmAddr:   activeClient.firmAddr   || '',
+        poNumber:   poNumber,
+        matterId:   mid,
+        clientMatterId: cm,
+        clientId:   ci,
+        currency:   document.getElementById('currency').value,
+        total:      total,
+        lineItems:  fees.map(function(e) {
+          var fs = feeSchedule[e.billing_code];
+          return { desc: fs ? fs.line_item_desc || fs.invoice_desc : e.billing_code,
+                   amount: fs ? fs.amount : 0, type: 'F' };
+        }).concat(usptof.map(function(e) {
+          return { desc: e.description, amount: e.amount, type: 'E' };
+        }))
+      } : null
+    });
+    var feeAmt   = fees.reduce(function(s,e) { return s + (feeSchedule[e.billing_code] ? feeSchedule[e.billing_code].amount : 0); }, 0);
+    var usptoAmt = usptof.reduce(function(s,e) { return s + e.amount; }, 0);
+    results.push({ mid: mid, invNum: invNum, ci: ci, invDesc: invDesc, feeAmt: feeAmt, usptoAmt: usptoAmt, total: total });
+    grandTotal += total; grandLines += lineNum;
+  });
+
+  if (!generatedFiles.length) return showStatus('gen-status', 'error', 'No valid line items generated.');
+
+  document.getElementById('summary').style.display = 'block';
+  document.getElementById('dl-btn').style.display = 'inline-block';
+  document.getElementById('wb-btn').style.display = 'inline-block';
+
+  document.getElementById('summary-stats').innerHTML =
+    '<div class="stat"><div class="val">' + generatedFiles.length + '</div><div class="lbl">Files</div></div>' +
+    '<div class="stat"><div class="val">' + grandLines + '</div><div class="lbl">Line Items</div></div>' +
+    '<div class="stat"><div class="val">$' + money(grandTotal) + '</div><div class="lbl">Grand Total</div></div>' +
+    '<div class="stat"><div class="val">' + warnings.length + '</div><div class="lbl">Warnings</div></div>';
+
+  var breakdown = '<tr><th>Matter ID</th><th>Invoice #</th><th>Client ID</th><th>Invoice Description</th><th>Flat Fee</th><th>USPTO</th><th>Total</th></tr>';
+  results.forEach(function(r) {
+    breakdown += '<tr><td>' + r.mid + '</td><td>' + r.invNum + '</td><td>' + r.ci + '</td><td>' + r.invDesc + '</td><td>$' + money(r.feeAmt) + '</td><td>$' + money(r.usptoAmt) + '</td><td><strong>$' + money(r.total) + '</strong></td></tr>';
+  });
+  document.getElementById('matter-breakdown').innerHTML = breakdown;
+
+  var preview = generatedFiles[0].content.split('\n').slice(0,4).map(function(l) { return l.length > 130 ? l.substring(0,130) + '\u2026' : l; }).join('\n');
+  document.getElementById('preview-content').textContent = '&#8212; ' + generatedFiles[0].filename + ' &#8212;\n' + preview;
+
+  var msg = generatedFiles.length + ' file(s) ready - $' + money(grandTotal) + ' total.';
+  if (warnings.length) msg += '\n' + warnings.map(function(w) { return 'Warning: ' + w; }).join('\n');
+  showStatus('gen-status', warnings.length ? 'warn' : 'success', msg);
+}
+
+// ── DOWNLOAD ──────────────────────────────────────────────────
+async function downloadFiles() {
+  for (var i = 0; i < generatedFiles.length; i++) {
+    var f = generatedFiles[i];
+    // Download LEDES .txt
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([f.content], { type: 'text/plain' }));
+    a.download = f.filename;
+    a.click();
+    await new Promise(function(r) { setTimeout(r, 400); });
+    // Download PDF invoice if required
+    if (f.pdfMeta) {
+      await downloadInvoicePdf(f.pdfMeta);
+      await new Promise(function(r) { setTimeout(r, 600); });
+    }
+  }
+}
+
+function buildInvoiceHtml(m) {
+  var cur = m.currency || 'USD';
+  function fmt(n) { return cur + ' ' + n.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 }); }
+  function fmtDate(d) {
+    if (!d) return '';
+    var p = d.split('-');
+    return p.length === 3 ? (parseInt(p[1]) + '/' + parseInt(p[2]) + '/' + p[0]) : d;
+  }
+  var rows = '';
+  var fees    = m.lineItems.filter(function(l) { return l.type === 'F'; });
+  var expenses = m.lineItems.filter(function(l) { return l.type === 'E'; });
+  if (fees.length) {
+    rows += '<tr><td colspan="2" style="padding:8px 12px;background:#f7fafc;font-weight:700;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.05em;color:#718096">Professional Fees</td></tr>';
+    fees.forEach(function(l) {
+      rows += '<tr><td style="padding:7px 12px;border-bottom:1px solid #f0f4f8">' + l.desc + '</td><td style="padding:7px 12px;border-bottom:1px solid #f0f4f8;text-align:right;white-space:nowrap">' + fmt(l.amount) + '</td></tr>';
+    });
+  }
+  if (expenses.length) {
+    rows += '<tr><td colspan="2" style="padding:8px 12px;background:#f7fafc;font-weight:700;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.05em;color:#718096">Disbursements</td></tr>';
+    expenses.forEach(function(l) {
+      rows += '<tr><td style="padding:7px 12px;border-bottom:1px solid #f0f4f8">' + l.desc + '</td><td style="padding:7px 12px;border-bottom:1px solid #f0f4f8;text-align:right;white-space:nowrap">' + fmt(l.amount) + '</td></tr>';
+    });
+  }
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1a202c;font-size:13px;padding:48px}
+  @media print{body{padding:0}}
+  .header{border-bottom:2px solid #1a365d;padding-bottom:16px;margin-bottom:24px}
+  .firm{font-size:1.1rem;font-weight:700;color:#1a365d}
+  .firm-addr{font-size:0.82rem;color:#718096;margin-top:3px}
+  .invoice-title{font-size:1.6rem;font-weight:700;color:#1a365d;margin-bottom:4px}
+  .meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px}
+  .meta-block label{font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#718096;display:block;margin-bottom:2px}
+  .meta-block span{font-size:0.88rem;color:#2d3748}
+  .po-badge{display:inline-block;background:#ebf8ff;border:1px solid #90cdf4;color:#2b6cb0;font-weight:700;font-size:0.82rem;padding:4px 12px;border-radius:20px;margin-bottom:20px}
+  table{width:100%;border-collapse:collapse;margin-bottom:0}
+  th{background:#1a365d;color:white;padding:9px 12px;text-align:left;font-size:0.8rem}
+  th:last-child{text-align:right}
+  .total-row td{padding:10px 12px;font-weight:700;font-size:1rem;background:#f7fafc;border-top:2px solid #1a365d}
+  .total-row td:last-child{text-align:right;color:#1a365d;font-size:1.1rem}
+</style></head><body>
+<div class="header">
+  <div class="firm">${m.firmName || 'Law Firm'}</div>
+  ${m.firmAddr ? '<div class="firm-addr">' + m.firmAddr + '</div>' : ''}
+</div>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px">
+  <div>
+    <div class="invoice-title">INVOICE</div>
+    <div style="color:#718096;font-size:0.85rem">${m.invNum}</div>
+  </div>
+  <div style="text-align:right;font-size:0.85rem;color:#4a5568">
+    <div><strong>Invoice Date:</strong> ${fmtDate(m.invDate)}</div>
+    <div><strong>Billing Period:</strong> ${fmtDate(m.billStart)} &ndash; ${fmtDate(m.billEnd)}</div>
+  </div>
+</div>
+${m.poNumber ? '<div class="po-badge">PO# ' + m.poNumber + '</div>' : ''}
+<div class="meta-grid">
+  <div>
+    <div class="meta-block"><label>Bill To</label><span>${m.clientName}${m.clientAddr ? '<br><span style="color:#718096">' + m.clientAddr + '</span>' : ''}</span></div>
+  </div>
+  <div>
+    <div class="meta-block" style="margin-bottom:10px"><label>Matter ID</label><span>${m.matterId}</span></div>
+    ${m.clientMatterId && m.clientMatterId !== m.matterId ? '<div class="meta-block" style="margin-bottom:10px"><label>Client Matter ID</label><span>' + m.clientMatterId + '</span></div>' : ''}
+    ${m.clientId ? '<div class="meta-block"><label>Client ID</label><span>' + m.clientId + '</span></div>' : ''}
+  </div>
+</div>
+<table>
+  <tr><th>Description</th><th>Amount</th></tr>
+  ${rows}
+  <tr class="total-row"><td>Total Due</td><td>${fmt(m.total)}</td></tr>
+</table>
+</body></html>`;
+}
+
+async function downloadInvoicePdf(meta) {
+  var html = buildInvoiceHtml(meta);
+  var iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:850px;height:1100px;border:none';
+  document.body.appendChild(iframe);
+  await new Promise(function(resolve) {
+    iframe.onload = resolve;
+    iframe.srcdoc = html;
+  });
+  // Small settle delay for fonts/layout
+  await new Promise(function(r) { setTimeout(r, 300); });
+  // Use print-to-PDF via the iframe
+  var iframeWin = iframe.contentWindow;
+  // Build a named blob URL and trigger print dialog pointed at just this frame
+  // Fallback: open in new tab so user can Ctrl+P → Save as PDF
+  var blob = new Blob([html], { type: 'text/html' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href   = url;
+  a.download = 'Invoice_' + meta.invNum + '.html';
+  a.click();
+  document.body.removeChild(iframe);
+  URL.revokeObjectURL(url);
+}
+
+// ── MARK BILLED ───────────────────────────────────────────────
+function markBilled() {
+  showStatus('gen-status', 'warn', 'Write-back requires OAuth setup. For now, manually add "Yes" to the Billed column and the invoice number to the Invoice Number column for each billed row in your sheet.');
+}
+
+// ── ACCRUALS ──────────────────────────────────────────────────
+function refreshAccruals() {
+  if (accrualBaseYear === null) return;
+  loadAccruals(accrualBaseYear + accrualYearOffset);
+}
+
+async function loadAccruals(yr) {
+  try {
+    document.getElementById('accrual-year-label').textContent = yr;
+    var results = await Promise.all([apiGet('Fees!A:Z'), apiGet('USPTO Fees!A:Z')]);
+    var feesRaw = results[0], usptoRaw = results[1];
+    var months = [];
+    for (var i = 0; i < 12; i++) months.push(new Date(yr, i, 1).toLocaleString('default', { month: 'short' }));
+
+    // acc[matter][month] = { billed: 0, unbilled: 0 }
+    var acc = {};
+
+    function addRows(raw, isUspto) {
+      var rows = rowsFromRaw(raw);
+      if (!rows.length) return;
+      var mK  = fk(rows[0], ['matter_id','matter id','matter']);
+      var amK = isUspto ? fk(rows[0], ['amount','fee','cost','amt']) : null;
+      var bcK = isUspto ? null : fk(rows[0], ['billing_code','billing code','code']);
+      var dtK = fk(rows[0], ['work_date','work date','date_completed','date completed']);
+      var blK = fk(rows[0], ['billed','status','invoiced']);
+
+      rows.forEach(function(r) {
+        if (!mK || !r[mK]) return;
+        var d = parseDate(r[dtK] || '');
+        if (!d || d.getFullYear() !== yr) return;
+
+        var amt = isUspto
+          ? (parseFloat(r[amK]) || 0)
+          : (feeSchedule[r[bcK] || ''] ? feeSchedule[r[bcK]].amount : 0);
+        if (amt === 0) return;
+
+        var billedVal = (r[blK] || '').toLowerCase();
+        var isBilled  = ['yes','true','✓','x'].indexOf(billedVal) >= 0;
+        var mo        = d.getMonth();
+        var mid       = r[mK];
+
+        if (!acc[mid]) acc[mid] = Array(12).fill(null).map(function() { return { billed: 0, unbilled: 0 }; });
+        if (isBilled) {
+          acc[mid][mo].billed += amt;
+        } else {
+          acc[mid][mo].unbilled += amt;
+        }
+      });
+    }
+
+    addRows(feesRaw, false);
+    addRows(usptoRaw, true);
+
+    if (!Object.keys(acc).length) {
+      document.getElementById('accruals-card').style.display = 'none';
+      return;
+    }
+
+    // Column totals
+    var totBilled   = Array(12).fill(0);
+    var totUnbilled = Array(12).fill(0);
+    Object.values(acc).forEach(function(a) {
+      a.forEach(function(cell, i) {
+        totBilled[i]   += cell.billed;
+        totUnbilled[i] += cell.unbilled;
+      });
+    });
+
+    function cellHtml(cell) {
+      var parts = [];
+      if (cell.billed   > 0) parts.push('<span style="color:#276749;display:block">$' + money(cell.billed)   + '</span>');
+      if (cell.unbilled > 0) parts.push('<span style="color:#2b6cb0;display:block">$' + money(cell.unbilled) + '</span>');
+      return parts.length ? parts.join('') : '<span style="color:#cbd5e0">&#8212;</span>';
+    }
+
+    var html = '<div style="overflow-x:auto"><table>';
+    html += '<tr><th>Matter</th>';
+    months.forEach(function(m) { html += '<th style="text-align:right">' + m + '</th>'; });
+    html += '<th style="text-align:right">YTD Billed</th><th style="text-align:right">YTD Unbilled</th></tr>';
+
+    Object.keys(acc).sort().forEach(function(mid) {
+      var a = acc[mid];
+      var ytdBilled   = a.reduce(function(s,c) { return s + c.billed;   }, 0);
+      var ytdUnbilled = a.reduce(function(s,c) { return s + c.unbilled; }, 0);
+      html += '<tr><td><strong>' + mid + '</strong></td>';
+      a.forEach(function(cell) { html += '<td style="text-align:right">' + cellHtml(cell) + '</td>'; });
+      html += '<td style="text-align:right"><strong style="color:#276749">$' + money(ytdBilled)   + '</strong></td>';
+      html += '<td style="text-align:right"><strong style="color:#2b6cb0">$' + money(ytdUnbilled) + '</strong></td>';
+      html += '</tr>';
+    });
+
+    // Totals row
+    html += '<tr style="background:#edf2f7;font-weight:700"><td>Total</td>';
+    for (var i = 0; i < 12; i++) {
+      var parts = [];
+      if (totBilled[i]   > 0) parts.push('<span style="color:#276749;display:block">$' + money(totBilled[i])   + '</span>');
+      if (totUnbilled[i] > 0) parts.push('<span style="color:#2b6cb0;display:block">$' + money(totUnbilled[i]) + '</span>');
+      html += '<td style="text-align:right">' + (parts.length ? parts.join('') : '&#8212;') + '</td>';
+    }
+    var grandBilled   = totBilled.reduce(function(s,v)   { return s+v; }, 0);
+    var grandUnbilled = totUnbilled.reduce(function(s,v) { return s+v; }, 0);
+    html += '<td style="text-align:right"><strong style="color:#276749">$' + money(grandBilled)   + '</strong></td>';
+    html += '<td style="text-align:right"><strong style="color:#2b6cb0">$' + money(grandUnbilled) + '</strong></td>';
+    html += '</tr></table></div>';
+
+    document.getElementById('accruals-card').style.display = 'block';
+    document.getElementById('accruals-content').innerHTML = html;
+
+  } catch(e) {
+    console.error('Accruals error:', e);
+    document.getElementById('accruals-card').style.display = 'none';
+  }
+}
+
+// ── SALESFORCE EXPENSE CODES ──────────────────────────────────
+var SALESFORCE_CODES = [
+  { keywords: ['provisional application filing fee'],                code: 'X900', amount: null },
+  { keywords: ['provisional', 'filing fee'],                         code: 'X900', amount: null },
+  { keywords: ['utility patent appl. filing fee'],                   code: 'X901', amount: 350 },
+  { keywords: ['utility patent application filing fee'],             code: 'X901', amount: 350 },
+  { keywords: ['non-provisional', 'filing fee'],                     code: 'X901', amount: 350 },
+  { keywords: ['non provisional', 'filing fee'],                     code: 'X901', amount: 350 },
+  { keywords: ['design patent appl. filing fee'],                    code: 'X902', amount: 300 },
+  { keywords: ['design', 'filing fee'],                              code: 'X902', amount: 300 },
+  { keywords: ['surcharge'],                                         code: 'X903', amount: 170 },
+  { keywords: ['utility patent appl. search fee'],                   code: 'X904', amount: 770 },
+  { keywords: ['utility', 'search fee'],                             code: 'X904', amount: 770 },
+  { keywords: ['design patent appl. search fee'],                    code: 'X905', amount: 300 },
+  { keywords: ['design', 'search fee'],                              code: 'X905', amount: 300 },
+  { keywords: ['utility patent appl. examination fee'],              code: 'X906', amount: 880 },
+  { keywords: ['utility', 'examination fee'],                        code: 'X906', amount: 880 },
+  { keywords: ['design patent appl. examination fee'],               code: 'X907', amount: 700 },
+  { keywords: ['design', 'examination fee'],                         code: 'X907', amount: 700 },
+  { keywords: ['issue fee for utility patent'],                      code: 'X908', amount: 1290 },
+  { keywords: ['utility', 'issue fee'],                              code: 'X908', amount: 1290 },
+  { keywords: ['issue fee for design patent'],                       code: 'X909', amount: 1300 },
+  { keywords: ['design', 'issue fee'],                               code: 'X909', amount: 1300 },
+  { keywords: ['information disclosure statement'],                  code: 'X910', amount: 800 },
+  { keywords: ['ids'],                                               code: 'X910', amount: 800 },
+  { keywords: ['request for continued examination', '1st'],          code: 'X911', amount: 1500 },
+  { keywords: ['request for continued examination', 'first'],        code: 'X911', amount: 1500 },
+  { keywords: ['rce', '1st'],                                        code: 'X911', amount: 1500 },
+  { keywords: ['rce', 'first'],                                      code: 'X911', amount: 1500 },
+  { keywords: ['request for continued examination', 'subsequent'],   code: 'X912', amount: 2860 },
+  { keywords: ['rce', 'subsequent'],                                 code: 'X912', amount: 2860 },
+  { keywords: ['request for continued examination'],                 code: 'X911', amount: 1500 },
+  { keywords: ['rce'],                                               code: 'X911', amount: 1500 },
+  { keywords: ['after final'],                                       code: 'X913', amount: 945 },
+  { keywords: ['certificate of correction'],                         code: 'X914', amount: 172 },
+  { keywords: ['terminal disclaimer'],                               code: 'X915', amount: 183 },
+  { keywords: ['statutory disclaimer'],                              code: 'X915', amount: 183 },
+  { keywords: ['pct transmittal fee'],                               code: 'X916', amount: 285 },
+  { keywords: ['pct transmittal'],                                   code: 'X916', amount: 285 },
+  { keywords: ['foreign filing'],                                    code: 'X917', amount: null },
+  { keywords: ['missing parts'],                                     code: 'X918', amount: 690 },
+  { keywords: ['excess dependent claims'],                           code: 'X919', amount: null },
+  { keywords: ['excess claims', 'dependent'],                        code: 'X919', amount: null },
+  { keywords: ['excess independent claims'],                         code: 'X920', amount: null },
+  { keywords: ['excess claims', 'independent'],                      code: 'X920', amount: null },
+  { keywords: ['notice of appeal'],                                  code: 'X921', amount: 905 },
+  { keywords: ['appeal brief'],                                      code: 'X922', amount: null },
+  { keywords: ['substantive action', 'non-us'],                      code: 'X923', amount: null },
+  { keywords: ['non-substantive', 'non-us'],                         code: 'X924', amount: null },
+  { keywords: ['translation'],                                       code: 'X139', amount: null },
+  { keywords: ['drawing'],                                           code: 'X200', amount: null },
+];
+
+function getSalesforceCode(description) {
+  var desc = description.toLowerCase();
+  var best = null;
+  SALESFORCE_CODES.forEach(function(entry) {
+    var allMatch = entry.keywords.every(function(kw) { return desc.indexOf(kw) >= 0; });
+    if (allMatch) {
+      if (!best || entry.keywords.join('').length > best.keywords.join('').length) {
+        best = entry;
+      }
+    }
+  });
+  return best || null;
+}
+
+window.addEventListener('DOMContentLoaded', function() {
+  loadClients();
+
+  // Hardcoded default clients — added automatically if not already saved
+  var defaultClients = [
+    {
+      name:        "Salesforce",
+      sheetId:     "1zCaz23TG-f1f5godz7DWANBcmWI52DHyMksORuDPHYk",
+      defaultTk:   "NJM",
+      defaultCid:  "000111",
+      firmName:    "",
+      firmAddr:    "",
+      clientAddr:  "",
+      requiresPdf: false
+    },
+    {
+      name:        "Okta",
+      sheetId:     "1I0uWKNB3Pd-pfxd-swhJCqHIPdUlP-wUl9qLJyINTDQ",
+      defaultTk:   "NJM",
+      defaultCid:  "000112",
+      firmName:    "Landfall IP",
+      firmAddr:    "1495 Canyon Blvd. Boulder, CO 80302",
+      clientAddr:  "Okta Inc. 100 First Street, 6th Floor, San Francisco, CA 94105",
+      requiresPdf: true
+    }
+  ];
+
+  // Only add if a client with that name does not already exist
+  var changed = false;
+  defaultClients.forEach(function(dc) {
+    var exists = clients.some(function(c) { return c.name === dc.name; });
+    if (!exists) {
+      clients.push(dc);
+      changed = true;
+    }
+  });
+  if (changed) saveClients();
+
+  renderDropdown();
+});
+</script>
+</body>
+</html>
