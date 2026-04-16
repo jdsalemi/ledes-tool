@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LEDES 1998B Generator</title>
 <style>
@@ -204,6 +205,7 @@ var generatedFiles = [];
 var billedMeta = { feesHeaders: [], usptoHeaders: [], rows: [] };
 var clients = [];
 var activeClient = null;
+var oauthToken = null;   // Google OAuth access token for sheet write-back
 
 // ── CLIENT MANAGEMENT ─────────────────────────────────────────
 function loadClients() {
@@ -851,8 +853,116 @@ async function downloadInvoicePdf(meta) {
 }
 
 // ── MARK BILLED ───────────────────────────────────────────────
-function markBilled() {
-  showStatus('gen-status', 'warn', 'Write-back requires OAuth setup. For now, manually add "Yes" to the Billed column and the invoice number to the Invoice Number column for each billed row in your sheet.');
+var OAUTH_CLIENT_ID = '370545972435-0bb6nvm8m9uhtf03ota9n80ah5app5up.apps.googleusercontent.com';
+var OAUTH_SCOPE     = 'https://www.googleapis.com/auth/spreadsheets';
+
+function getOAuthToken(callback) {
+  if (oauthToken) { callback(oauthToken); return; }
+  var client = google.accounts.oauth2.initTokenClient({
+    client_id: OAUTH_CLIENT_ID,
+    scope:     OAUTH_SCOPE,
+    callback:  function(resp) {
+      if (resp.error) {
+        showStatus('gen-status', 'error', 'OAuth failed: ' + resp.error);
+        return;
+      }
+      oauthToken = resp.access_token;
+      callback(oauthToken);
+    }
+  });
+  client.requestAccessToken();
+}
+
+async function markBilled() {
+  if (!billedMeta.rows.length) {
+    showStatus('gen-status', 'error', 'No generated files to mark — generate first.');
+    return;
+  }
+  var sid = activeClient ? activeClient.sheetId : '';
+  if (!sid) { showStatus('gen-status', 'error', 'No client selected.'); return; }
+
+  showStatus('gen-status', 'info', 'Requesting Google sign-in...');
+
+  getOAuthToken(async function(token) {
+    showStatus('gen-status', 'info', 'Marking ' + billedMeta.rows.length + ' row(s) as billed...');
+    var errors = [];
+
+    // First load headers for both tabs so we know which columns to write
+    async function getColIndices(tabName) {
+      var url = 'https://sheets.googleapis.com/v4/spreadsheets/' + sid +
+                '/values/' + encodeURIComponent(tabName + '!1:1') +
+                '?key=' + document.getElementById('api_key').value.trim();
+      var r = await fetch(url);
+      var d = await r.json();
+      var headers = ((d.values || [[]])[0] || []).map(function(h) {
+        return h.trim().toLowerCase().replace(/[\s]+/g, '_');
+      });
+      var billedCol  = headers.indexOf('billed');
+      var invNumCol  = headers.indexOf('invoice_number');
+      return { billedCol: billedCol, invNumCol: invNumCol };
+    }
+
+    var feesCols  = await getColIndices('Fees');
+    var uCols     = await getColIndices('USPTO Fees');
+
+    // Build batch update requests
+    var requests = [];
+    for (var i = 0; i < billedMeta.rows.length; i++) {
+      var meta   = billedMeta.rows[i];
+      var cols   = meta.sheet === 'Fees' ? feesCols : uCols;
+      var rowNum = meta.row;  // 1-based row number
+
+      function colLetter(idx) {
+        // Convert 0-based column index to A, B, C... Z, AA, AB...
+        var s = '';
+        idx += 1;
+        while (idx > 0) {
+          var rem = (idx - 1) % 26;
+          s = String.fromCharCode(65 + rem) + s;
+          idx = Math.floor((idx - 1) / 26);
+        }
+        return s;
+      }
+
+      if (cols.billedCol >= 0) {
+        requests.push({
+          range:  meta.sheet + '!' + colLetter(cols.billedCol) + rowNum,
+          values: [['Yes']]
+        });
+      }
+      if (cols.invNumCol >= 0) {
+        requests.push({
+          range:  meta.sheet + '!' + colLetter(cols.invNumCol) + rowNum,
+          values: [[meta.invNum]]
+        });
+      }
+    }
+
+    // Execute as batch
+    try {
+      var batchUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' + sid + '/values:batchUpdate';
+      var body = {
+        valueInputOption: 'USER_ENTERED',
+        data: requests
+      };
+      var resp = await fetch(batchUrl, {
+        method:  'POST',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type':  'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      var result = await resp.json();
+      if (result.error) throw new Error(result.error.message);
+      showStatus('gen-status', 'success',
+        'Marked ' + billedMeta.rows.length + ' row(s) as billed and wrote invoice numbers.');
+      // Hide the button so it can't be clicked twice
+      document.getElementById('wb-btn').style.display = 'none';
+    } catch(e) {
+      showStatus('gen-status', 'error', 'Write-back failed: ' + e.message);
+    }
+  });
 }
 
 // ── ACCRUALS ──────────────────────────────────────────────────
