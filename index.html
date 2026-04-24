@@ -505,7 +505,7 @@ async function loadAndPreview() {
       allUspto.forEach(function(r, i) {
         if (!umK || !r[umK] || !uamK || !r[uamK]) return;
         var billed = (r[ublK] || '').toLowerCase();
-        if (['yes','true','\u2713','x'].indexOf(billed) >= 0) return;
+        if (['yes','true','✓','x'].indexOf(billed) >= 0) return;
         var wd = uwdK ? r[uwdK] : '';
         var ulfmK = fk(allUspto[0], ['law_firm_matter_id','law firm matter id','lf_matter_id','firm_matter_id']);
         usptoEntries.push({ _row: i+2, matter_id: r[umK], law_firm_matter_id: ulfmK ? r[ulfmK] : '', client_matter_id: ucmK ? r[ucmK] : '', client_id: uciK ? r[uciK] : '', description: udsK ? r[udsK] : 'USPTO Fee', amount: parseFloat(r[uamK]) || 0, expense_code: uecK ? r[uecK] : 'E112', work_date: wd, invoice_number: uinK ? r[uinK] : '' });
@@ -622,7 +622,7 @@ function generate() {
       }
       lineNum++; total += fs.amount;
       lines.push([
-        fmt(invDate), invNum, ci, lfmid, '__T__',
+        fmt(invDate), invNum, ci, mid, '__T__',
         fmt(billStart), fmt(billEnd), invDesc,
         lineNum, 'F', '1', '', fs.amount.toFixed(2),
         fmt(e.work_date) || fmt(invDate),
@@ -660,7 +660,7 @@ function generate() {
 
       lineNum++; total += expAmt;
       lines.push([
-        fmt(invDate), invNum, ci, lfmid, '__T__',
+        fmt(invDate), invNum, ci, mid, '__T__',
         fmt(billStart), fmt(billEnd), invDesc,
         lineNum, 'E', '1', '', expAmt.toFixed(2),
         fmt(e.work_date) || fmt(invDate),
