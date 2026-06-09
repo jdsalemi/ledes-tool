@@ -105,6 +105,10 @@ tr:hover td{background:#f7fafc}
             <label style="margin:0;font-weight:600;color:#2d3748">Generate PDF invoice alongside LEDES file</label>
           </div>
         </div>
+        <div class="grid2" style="margin-bottom:10px">
+          <div><label>Matter ID Prefix <span style="font-weight:400;color:#718096">(prepended in LEDES output, e.g. 000112-)</span></label><input id="cf_matter_prefix" placeholder="e.g. 000112-"></div>
+          <div></div>
+        </div>
         <div>
           <button class="btn btn-primary btn-sm" onclick="saveClient()">Save Client</button>
           <button class="btn btn-outline btn-sm" onclick="hideClientForm()">Cancel</button>
@@ -262,6 +266,7 @@ function showClientForm() {
   document.getElementById('cf_firm_name').value = '';
   document.getElementById('cf_firm_addr').value = '';
   document.getElementById('cf_requires_pdf').checked = false;
+  document.getElementById('cf_matter_prefix').value = '';
   document.getElementById('cf-status').innerHTML = '';
   document.getElementById('client-form').style.display = 'block';
 }
@@ -276,13 +281,15 @@ function saveClient() {
   var clientAddr = document.getElementById('cf_client_addr').value.trim();
   var firmName   = document.getElementById('cf_firm_name').value.trim();
   var firmAddr   = document.getElementById('cf_firm_addr').value.trim();
-  var reqPdf     = document.getElementById('cf_requires_pdf').checked;
+  var reqPdf       = document.getElementById('cf_requires_pdf').checked;
+  var matterPrefix = document.getElementById('cf_matter_prefix').value.trim();
   if (!name || !sheetId) {
     document.getElementById('cf-status').innerHTML = '<div class="msg msg-error">Client Name and Sheet ID are required.</div>';
     return;
   }
   clients.push({ name: name, sheetId: sheetId, defaultTk: defaultTk, defaultCid: defaultCid,
-                 clientAddr: clientAddr, firmName: firmName, firmAddr: firmAddr, requiresPdf: reqPdf });
+                 clientAddr: clientAddr, firmName: firmName, firmAddr: firmAddr, requiresPdf: reqPdf,
+                 matterIdPrefix: matterPrefix });
   saveClients();
   renderDropdown();
   document.getElementById('client_select').value = clients.length - 1;
@@ -604,6 +611,8 @@ function generate() {
     var cm   = anchor.client_matter_id || mid;
     var ci   = anchor.client_id || '';
     var lfmid = anchor.law_firm_matter_id || mid;  // Law Firm Matter ID for LEDES field 4
+    var prefix      = activeClient && activeClient.matterIdPrefix ? activeClient.matterIdPrefix : '';
+    var prefixedMid = prefix ? prefix + mid : mid;
     var invNum = nextInvNum(invFormat, seq++);
     var firstFS = fees[0] ? feeSchedule[fees[0].billing_code] : null;
     var invDesc = poPrefix + (firstFS ? firstFS.invoice_desc : '');
@@ -622,7 +631,7 @@ function generate() {
       }
       lineNum++; total += fs.amount;
       lines.push([
-        fmt(invDate), invNum, ci, mid, '__T__',
+        fmt(invDate), invNum, ci, prefixedMid, '__T__',
         fmt(billStart), fmt(billEnd), invDesc,
         lineNum, 'F', '1', '', fs.amount.toFixed(2),
         fmt(e.work_date) || fmt(invDate),
@@ -660,7 +669,7 @@ function generate() {
 
       lineNum++; total += expAmt;
       lines.push([
-        fmt(invDate), invNum, ci, mid, '__T__',
+        fmt(invDate), invNum, ci, prefixedMid, '__T__',
         fmt(billStart), fmt(billEnd), invDesc,
         lineNum, 'E', '1', '', expAmt.toFixed(2),
         fmt(e.work_date) || fmt(invDate),
@@ -704,7 +713,7 @@ function generate() {
     });
     var feeAmt   = fees.reduce(function(s,e) { return s + (feeSchedule[e.billing_code] ? feeSchedule[e.billing_code].amount : 0); }, 0);
     var usptoAmt = usptof.reduce(function(s,e) { return s + e.amount; }, 0);
-    results.push({ mid: mid, invNum: invNum, ci: ci, invDesc: invDesc, feeAmt: feeAmt, usptoAmt: usptoAmt, total: total });
+    results.push({ mid: mid, prefixedMid: prefixedMid, invNum: invNum, ci: ci, invDesc: invDesc, feeAmt: feeAmt, usptoAmt: usptoAmt, total: total });
     grandTotal += total; grandLines += lineNum;
   });
 
@@ -722,7 +731,7 @@ function generate() {
 
   var breakdown = '<tr><th>Matter ID</th><th>Invoice #</th><th>Client ID</th><th>Invoice Description</th><th>Flat Fee</th><th>USPTO</th><th>Total</th></tr>';
   results.forEach(function(r) {
-    breakdown += '<tr><td>' + r.mid + '</td><td>' + r.invNum + '</td><td>' + r.ci + '</td><td>' + r.invDesc + '</td><td>$' + money(r.feeAmt) + '</td><td>$' + money(r.usptoAmt) + '</td><td><strong>$' + money(r.total) + '</strong></td></tr>';
+    breakdown += '<tr><td>' + r.prefixedMid + '</td><td>' + r.invNum + '</td><td>' + r.ci + '</td><td>' + r.invDesc + '</td><td>$' + money(r.feeAmt) + '</td><td>$' + money(r.usptoAmt) + '</td><td><strong>$' + money(r.total) + '</strong></td></tr>';
   });
   document.getElementById('matter-breakdown').innerHTML = breakdown;
 
@@ -1162,14 +1171,15 @@ window.addEventListener('DOMContentLoaded', function() {
       requiresPdf: false
     },
     {
-      name:        "Okta",
-      sheetId:     "1I0uWKNB3Pd-pfxd-swhJCqHIPdUlP-wUl9qLJyINTDQ",
-      defaultTk:   "NJM",
-      defaultCid:  "000112",
-      firmName:    "Landfall IP",
-      firmAddr:    "1495 Canyon Blvd. Boulder, CO 80302",
-      clientAddr:  "Okta Inc. 100 First Street, 6th Floor, San Francisco, CA 94105",
-      requiresPdf: true
+      name:           "Okta",
+      sheetId:        "1I0uWKNB3Pd-pfxd-swhJCqHIPdUlP-wUl9qLJyINTDQ",
+      defaultTk:      "NJM",
+      defaultCid:     "000112",
+      firmName:       "Landfall IP",
+      firmAddr:       "1495 Canyon Blvd. Boulder, CO 80302",
+      clientAddr:     "Okta Inc. 100 First Street, 6th Floor, San Francisco, CA 94105",
+      requiresPdf:    true,
+      matterIdPrefix: "000112-"
     }
   ];
 
