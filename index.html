@@ -590,6 +590,36 @@ function generate() {
   var poNumber = document.getElementById('po_number').value.trim();
   var poPrefix = poNumber ? 'PO#' + poNumber + ' - ' : '';
 
+  // ── PRE-GENERATION VALIDATION (blocking) ────────────────────
+  // These issues prevent generation entirely so bad data never reaches a LEDES file.
+  var blockingIssues = [];
+  feeEntries.forEach(function(e) {
+    var fs = feeSchedule[e.billing_code];
+    if (!fs) {
+      blockingIssues.push('Matter ' + e.matter_id + ': billing code "' + e.billing_code + '" not found in Fee Schedule');
+      return;
+    }
+    var tkId = e.timekeeper_id || defaultTK;
+    if (!tkId) {
+      blockingIssues.push('Matter ' + e.matter_id + ': no timekeeper assigned (and no default set)');
+    }
+    if (!(fs.amount > 0)) {
+      blockingIssues.push('Matter ' + e.matter_id + ': fee "' + e.billing_code + '" has a $0.00 amount');
+    }
+  });
+  usptoEntries.forEach(function(e) {
+    if (!(e.amount > 0)) {
+      blockingIssues.push('Matter ' + e.matter_id + ': USPTO fee "' + e.description + '" has a $0.00 amount');
+    }
+  });
+  if (blockingIssues.length) {
+    var dedup = blockingIssues.filter(function(v, i, a) { return a.indexOf(v) === i; });
+    showStatus('gen-status', 'error',
+      'Cannot generate — fix these ' + dedup.length + ' issue(s) first:\n' +
+      dedup.map(function(s) { return '• ' + s; }).join('\n'));
+    return;
+  }
+
   // FIX: declare allMatterIds as a local variable (was missing, causing ReferenceError)
   var allMatterIds = [];
   var seen = {};
@@ -889,6 +919,20 @@ async function markBilled() {
   }
   var sid = activeClient ? activeClient.sheetId : '';
   if (!sid) { showStatus('gen-status', 'error', 'No client selected.'); return; }
+
+  // Confirm before the irreversible write-back
+  var matterCount = {};
+  billedMeta.rows.forEach(function(r) { matterCount[r.invNum] = true; });
+  var invCount = Object.keys(matterCount).length;
+  var ok = window.confirm(
+    'Mark ' + billedMeta.rows.length + ' row(s) across ' + invCount + ' invoice(s) as billed?\n\n' +
+    'This writes "Yes" to the Billed column and the invoice number to each row. ' +
+    'It cannot be undone automatically.'
+  );
+  if (!ok) {
+    showStatus('gen-status', 'info', 'Mark as billed cancelled.');
+    return;
+  }
 
   showStatus('gen-status', 'info', 'Requesting Google sign-in...');
 
