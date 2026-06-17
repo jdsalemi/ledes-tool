@@ -176,6 +176,20 @@ tr:hover td{background:#f7fafc}
     </div>
   </div>
 
+  <!-- INVOICE HISTORY -->
+  <div class="card" id="history-card" style="display:none">
+    <div class="card-header" style="display:flex;align-items:center;justify-content:space-between">
+      <span>&#128220; Invoice History</span>
+      <input id="history-search" placeholder="Filter by invoice # or matter..."
+             oninput="renderHistory()"
+             style="width:240px;padding:5px 10px;border-radius:6px;border:none;font-size:0.82rem">
+    </div>
+    <div class="card-body">
+      <div id="history-stats" class="summary" style="margin-bottom:4px"></div>
+      <div class="matter-table-wrap" style="max-height:340px"><table id="history-table"></table></div>
+    </div>
+  </div>
+
   <!-- ACCRUALS -->
   <div class="card" id="accruals-card" style="display:none">
     <div class="card-header" style="display:flex;align-items:center;justify-content:space-between">
@@ -557,6 +571,7 @@ async function loadAndPreview() {
     accrualBaseYear = yr;
     accrualYearOffset = 0;
     loadAccruals(yr);
+    loadInvoiceHistory();
 
   } catch(e) {
     showStatus('gen-status', 'error', 'Failed to load: ' + e.message);
@@ -1016,6 +1031,108 @@ async function markBilled() {
       showStatus('gen-status', 'error', 'Write-back failed: ' + e.message);
     }
   });
+}
+
+// ── INVOICE HISTORY ───────────────────────────────────────────
+var invoiceHistory = [];   // [{ invNum, date, matters:[], total, lineCount }]
+
+async function loadInvoiceHistory() {
+  try {
+    var results = await Promise.all([apiGet('Fees!A:Z'), apiGet('USPTO Fees!A:Z')]);
+    var feesRaw = results[0], usptoRaw = results[1];
+
+    // invNum -> { total, matters:Set, lineCount, dates:[] }
+    var byInv = {};
+
+    function addRows(raw, isUspto) {
+      var rows = rowsFromRaw(raw);
+      if (!rows.length) return;
+      var mK  = fk(rows[0], ['matter_id','matter id','matter']);
+      var inK = fk(rows[0], ['invoice_number','invoice number','inv_num']);
+      var dtK = fk(rows[0], ['work_date','work date','date_completed','date completed']);
+      var amK = isUspto ? fk(rows[0], ['amount','fee','cost','amt']) : null;
+      var bcK = isUspto ? null : fk(rows[0], ['billing_code','billing code','code']);
+      rows.forEach(function(r) {
+        var inv = inK ? (r[inK] || '').trim() : '';
+        if (!inv) return;   // only rows that have been invoiced
+        var amt = isUspto
+          ? (parseFloat(r[amK]) || 0)
+          : (feeSchedule[r[bcK] || ''] ? feeSchedule[r[bcK]].amount : 0);
+        if (!byInv[inv]) byInv[inv] = { total: 0, matters: {}, lineCount: 0, dates: [] };
+        byInv[inv].total     += amt;
+        byInv[inv].lineCount += 1;
+        if (mK && r[mK]) byInv[inv].matters[r[mK]] = true;
+        var d = parseDate(r[dtK] || '');
+        if (d) byInv[inv].dates.push(d);
+      });
+    }
+
+    addRows(feesRaw, false);
+    addRows(usptoRaw, true);
+
+    // Build sorted array — most recent first
+    invoiceHistory = Object.keys(byInv).map(function(inv) {
+      var rec     = byInv[inv];
+      var matters = Object.keys(rec.matters).sort();
+      // Use the latest work date as the proxy invoice date
+      var date = null;
+      rec.dates.forEach(function(d) { if (!date || d > date) date = d; });
+      var prefix = activeClient && activeClient.matterIdPrefix ? activeClient.matterIdPrefix : '';
+      return {
+        invNum:    inv,
+        date:      date,
+        matters:   matters.map(function(m) { return prefix ? prefix + m : m; }),
+        total:     rec.total,
+        lineCount: rec.lineCount
+      };
+    }).sort(function(a, b) {
+      // Sort by invoice number descending (newest first), falling back to string compare
+      return b.invNum.localeCompare(a.invNum, undefined, { numeric: true });
+    });
+
+    if (!invoiceHistory.length) {
+      document.getElementById('history-card').style.display = 'none';
+      return;
+    }
+    document.getElementById('history-card').style.display = 'block';
+    renderHistory();
+  } catch(e) {
+    console.error('Invoice history error:', e);
+    document.getElementById('history-card').style.display = 'none';
+  }
+}
+
+function renderHistory() {
+  var filter = (document.getElementById('history-search').value || '').toLowerCase().trim();
+  var list = invoiceHistory.filter(function(rec) {
+    if (!filter) return true;
+    if (rec.invNum.toLowerCase().indexOf(filter) >= 0) return true;
+    return rec.matters.some(function(m) { return m.toLowerCase().indexOf(filter) >= 0; });
+  });
+
+  var grandTotal = list.reduce(function(s, r) { return s + r.total; }, 0);
+  document.getElementById('history-stats').innerHTML =
+    '<div class="stat"><div class="val">' + list.length + '</div><div class="lbl">Invoices</div></div>' +
+    '<div class="stat"><div class="val">$' + money(grandTotal) + '</div><div class="lbl">Total Billed</div></div>';
+
+  function fmtDate(d) {
+    if (!d) return '&#8212;';
+    return (d.getMonth()+1) + '/' + d.getDate() + '/' + d.getFullYear();
+  }
+
+  var html = '<tr><th>Invoice #</th><th>Date</th><th>Matter(s)</th><th style="text-align:right">Total</th></tr>';
+  if (!list.length) {
+    html += '<tr><td colspan="4" style="text-align:center;color:#a0aec0;padding:18px">No invoices match.</td></tr>';
+  } else {
+    list.forEach(function(rec) {
+      var matterStr = rec.matters.length > 2
+        ? rec.matters.slice(0, 2).join(', ') + ' +' + (rec.matters.length - 2) + ' more'
+        : rec.matters.join(', ');
+      html += '<tr><td><strong>' + rec.invNum + '</strong></td><td>' + fmtDate(rec.date) +
+              '</td><td>' + matterStr + '</td><td style="text-align:right">$' + money(rec.total) + '</td></tr>';
+    });
+  }
+  document.getElementById('history-table').innerHTML = html;
 }
 
 // ── ACCRUALS ──────────────────────────────────────────────────
