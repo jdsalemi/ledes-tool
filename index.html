@@ -62,7 +62,7 @@ tr:hover td{background:#f7fafc}
   <p>Live Google Sheets &middot; Flat fee billing codes &middot; USPTO expenses &middot; Auto-sequenced invoice numbers</p>
 </header>
 <div class="container">
- 
+
   <!-- CONNECTION -->
   <div class="card">
     <div class="card-header">
@@ -129,7 +129,7 @@ tr:hover td{background:#f7fafc}
       </div>
     </div>
   </div>
- 
+
   <!-- INVOICE DETAILS -->
   <div class="card">
     <div class="card-header">&#128203; Invoice Details</div>
@@ -153,7 +153,7 @@ tr:hover td{background:#f7fafc}
       <div class="note-blue" style="margin-top:12px">&#128197; Pulls unbilled rows matching the invoice date month. Invoice numbers auto-sequence from the starting number.</div>
     </div>
   </div>
- 
+
   <!-- GENERATE -->
   <div class="card">
     <div class="card-header">&#9881;&#65039; Generate</div>
@@ -175,7 +175,7 @@ tr:hover td{background:#f7fafc}
       </div>
     </div>
   </div>
- 
+
   <!-- INVOICE HISTORY -->
   <div class="card" id="history-card" style="display:none">
     <div class="card-header" style="display:flex;align-items:center;justify-content:space-between">
@@ -189,7 +189,7 @@ tr:hover td{background:#f7fafc}
       <div class="matter-table-wrap" style="max-height:340px"><table id="history-table"></table></div>
     </div>
   </div>
- 
+
   <!-- ACCRUALS -->
   <div class="card" id="accruals-card" style="display:none">
     <div class="card-header" style="display:flex;align-items:center;justify-content:space-between">
@@ -208,7 +208,7 @@ tr:hover td{background:#f7fafc}
       <div id="accruals-content"></div>
     </div>
   </div>
- 
+
 </div>
 <script>
 // ── STATE ─────────────────────────────────────────────────────
@@ -224,7 +224,7 @@ var billedMeta = { feesHeaders: [], usptoHeaders: [], rows: [] };
 var clients = [];
 var activeClient = null;
 var oauthToken = null;   // Google OAuth access token for sheet write-back
- 
+
 // ── CLIENT MANAGEMENT ─────────────────────────────────────────
 function loadClients() {
   try { clients = JSON.parse(localStorage.getItem('ledes_clients') || '[]'); } catch(e) { clients = []; }
@@ -331,7 +331,7 @@ function resetConnection() {
   document.getElementById('dl-btn').style.display = 'none';
   document.getElementById('wb-btn').style.display = 'none';
 }
- 
+
 // ── HELPERS ───────────────────────────────────────────────────
 function getSheetId() {
   return activeClient ? activeClient.sheetId : '';
@@ -394,7 +394,7 @@ function setPill(id, ok) {
   el.classList.toggle('ok', ok);
   el.classList.toggle('err', !ok);
 }
- 
+
 // ── SHEET API ─────────────────────────────────────────────────
 async function apiGet(range) {
   var key = document.getElementById('api_key').value.trim();
@@ -405,7 +405,7 @@ async function apiGet(range) {
   if (!r.ok) { var e = await r.json(); throw new Error(e.error && e.error.message ? e.error.message : 'API error ' + r.status); }
   return r.json();
 }
- 
+
 // ── CONNECT ───────────────────────────────────────────────────
 async function connectSheet() {
   var key = document.getElementById('api_key').value.trim();
@@ -418,7 +418,14 @@ async function connectSheet() {
     var meta = await res.json();
     if (meta.error) throw new Error(meta.error.message);
     var actual = (meta.sheets || []).map(function(s) { return s.properties.title.trim().toLowerCase(); });
-    var tabs = [['Fees','pill-fees'],['USPTO Fees','pill-uspto'],['Fee Schedule','pill-schedule'],['Timekeepers','pill-timekeepers']];
+    // Flat-rate clients only need Fees + Timekeepers; others need all four.
+    var isFlat = activeClient && activeClient.flatRate;
+    var tabs = isFlat
+      ? [['Fees','pill-fees'],['Timekeepers','pill-timekeepers']]
+      : [['Fees','pill-fees'],['USPTO Fees','pill-uspto'],['Fee Schedule','pill-schedule'],['Timekeepers','pill-timekeepers']];
+    // Hide the pills this client doesn't use
+    document.getElementById('pill-uspto').style.display    = isFlat ? 'none' : '';
+    document.getElementById('pill-schedule').style.display = isFlat ? 'none' : '';
     var allOk = true;
     tabs.forEach(function(t) {
       var ok = actual.indexOf(t[0].toLowerCase()) >= 0;
@@ -428,12 +435,12 @@ async function connectSheet() {
     document.getElementById('sheet-pills').style.display = 'flex';
     document.getElementById('conn-dot').classList.toggle('green', allOk);
     document.getElementById('conn-label').textContent = allOk ? 'Connected' : 'Partial';
-    showStatus('connect-status', allOk ? 'success' : 'warn', allOk ? 'All tabs found. Fill in invoice details and click Load.' : 'Some tabs missing - check names match exactly.');
+    showStatus('connect-status', allOk ? 'success' : 'warn', allOk ? 'All required tabs found. Fill in invoice details and click Load.' : 'Some tabs missing - check names match exactly.');
   } catch(e) {
     showStatus('connect-status', 'error', 'Connection failed: ' + e.message);
   }
 }
- 
+
 // ── LOAD ──────────────────────────────────────────────────────
 async function loadAndPreview() {
   var invDate = document.getElementById('inv_date').value;
@@ -443,14 +450,23 @@ async function loadAndPreview() {
   var monthLabel = new Date(yr, mo-1, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
   showStatus('gen-status', 'info', 'Loading...');
   document.getElementById('data-preview').innerHTML = '';
- 
+
   try {
-    var results = await Promise.all([
-      apiGet('Fees!A:Z'), apiGet('USPTO Fees!A:Z'),
-      apiGet('Fee Schedule!A:F'), apiGet('Timekeepers!A:Z')
-    ]);
-    var feesRaw = results[0], usptoRaw = results[1], schedRaw = results[2], tkRaw = results[3];
- 
+    var isFlatClient = activeClient && activeClient.flatRate;
+    var empty = { values: [] };
+    var feesRaw, usptoRaw, schedRaw, tkRaw;
+    if (isFlatClient) {
+      // Flat-rate clients only have Fees + Timekeepers tabs
+      var fr = await Promise.all([apiGet('Fees!A:Z'), apiGet('Timekeepers!A:Z')]);
+      feesRaw = fr[0]; tkRaw = fr[1]; usptoRaw = empty; schedRaw = empty;
+    } else {
+      var results = await Promise.all([
+        apiGet('Fees!A:Z'), apiGet('USPTO Fees!A:Z'),
+        apiGet('Fee Schedule!A:F'), apiGet('Timekeepers!A:Z')
+      ]);
+      feesRaw = results[0]; usptoRaw = results[1]; schedRaw = results[2]; tkRaw = results[3];
+    }
+
     // Timekeepers
     var tkRows = rowsFromRaw(tkRaw);
     timekeepers = {};
@@ -460,7 +476,7 @@ async function loadAndPreview() {
       var clK = fk(tkRows[0], ['classification','class','level','title']);
       tkRows.forEach(function(r) { if (idK && r[idK]) timekeepers[r[idK]] = { name: nmK ? r[nmK] : '', classification: clK ? r[clK] : '' }; });
     }
- 
+
     // Fee Schedule — keyed by code (col A) and also by line_item_desc (col C) for USPTO lookup
     feeSchedule = {};
     feeScheduleByDesc = {};
@@ -484,7 +500,7 @@ async function loadAndPreview() {
         feeScheduleByDesc[entry.line_item_desc.toLowerCase()] = entry;
       }
     }
- 
+
     // Fees tab
     billedMeta.feesHeaders = (feesRaw.values || [[]])[0] || [];
     var allFees = rowsFromRaw(feesRaw);
@@ -530,7 +546,7 @@ async function loadAndPreview() {
         });
       });
     }
- 
+
     // USPTO tab
     billedMeta.usptoHeaders = (usptoRaw.values || [[]])[0] || [];
     var allUspto = rowsFromRaw(usptoRaw);
@@ -554,18 +570,18 @@ async function loadAndPreview() {
         usptoEntries.push({ _row: i+2, matter_id: r[umK], law_firm_matter_id: ulfmK ? r[ulfmK] : '', client_matter_id: ucmK ? r[ucmK] : '', client_id: uciK ? r[uciK] : '', description: udsK ? r[udsK] : 'USPTO Fee', amount: parseFloat(r[uamK]) || 0, expense_code: uecK ? r[uecK] : 'E112', work_date: wd, invoice_number: uinK ? r[uinK] : '' });
       });
     }
- 
+
     // Build preview
     var schedKeys = Object.keys(feeSchedule);
     var html = '<div style="margin:14px 0 6px;font-size:0.85rem;color:#4a5568">Loaded all unbilled rows (invoicing in <strong>' + monthLabel + '</strong>)</div>';
- 
+
     html += '<div class="section-title">Fee Schedule (' + schedKeys.length + ' codes)</div><div style="overflow-x:auto"><table><tr><th>Code</th><th>Invoice Description</th><th>Line Item Description</th><th>Amount</th></tr>';
     schedKeys.slice(0,6).forEach(function(code) {
       var fs = feeSchedule[code];
       html += '<tr><td><strong>' + code + '</strong></td><td>' + (fs.invoice_desc || '<span style="color:red">EMPTY</span>') + '</td><td>' + (fs.line_item_desc || '').substring(0,40) + '</td><td>$' + money(fs.amount) + '</td></tr>';
     });
     html += '</table></div>';
- 
+
     if (feeEntries.length) {
       html += '<div class="section-title" style="margin-top:14px">Fees (' + feeEntries.length + ' rows)</div><div style="overflow-x:auto"><table><tr><th>Matter ID</th><th>Client ID</th><th>Billing Code</th><th>Invoice Desc</th><th>Amount</th><th>Work Date</th><th>TK</th><th>Ref</th></tr>';
       feeEntries.forEach(function(r) {
@@ -579,7 +595,7 @@ async function loadAndPreview() {
     } else {
       html += '<div class="msg msg-warn" style="margin-top:12px">No unbilled fee rows found for ' + monthLabel + '. Check Work Date format and Billed column.</div>';
     }
- 
+
     if (usptoEntries.length) {
       html += '<div class="section-title" style="margin-top:14px">USPTO Fees (' + usptoEntries.length + ' rows)</div><div style="overflow-x:auto"><table><tr><th>Matter ID</th><th>Description</th><th>Amount</th><th>Expense Code</th><th>Work Date</th></tr>';
       usptoEntries.forEach(function(r) {
@@ -587,20 +603,20 @@ async function loadAndPreview() {
       });
       html += '</table></div>';
     }
- 
+
     document.getElementById('data-preview').innerHTML = html;
     showStatus('gen-status', 'success', 'Loaded ' + feeEntries.length + ' fee row(s) and ' + usptoEntries.length + ' USPTO row(s) for ' + monthLabel + '.');
     accrualBaseYear = yr;
     accrualYearOffset = 0;
     loadAccruals(yr);
     loadInvoiceHistory();
- 
+
   } catch(e) {
     showStatus('gen-status', 'error', 'Failed to load: ' + e.message);
     console.error(e);
   }
 }
- 
+
 // ── INVOICE NUMBER ────────────────────────────────────────────
 function nextInvNum(base, offset) {
   var m = base.match(/^(.*?)(\d+)$/);
@@ -608,7 +624,7 @@ function nextInvNum(base, offset) {
   var num = parseInt(m[2]) + offset;
   return m[1] + String(num).padStart(m[2].length, '0');
 }
- 
+
 // ── GENERATE ─────────────────────────────────────────────────
 function generate() {
   var invDate   = document.getElementById('inv_date').value;
@@ -623,10 +639,10 @@ function generate() {
   if (!invFormat) errors.push('Starting Invoice Number');
   if (!feeEntries.length && !usptoEntries.length) errors.push('No entries loaded - click Load first');
   if (errors.length) return showStatus('gen-status', 'error', 'Missing: ' + errors.join(', '));
- 
+
   var poNumber = document.getElementById('po_number').value.trim();
   var poPrefix = poNumber ? 'PO#' + poNumber + ' - ' : '';
- 
+
   // ── PRE-GENERATION VALIDATION (blocking) ────────────────────
   // These issues prevent generation entirely so bad data never reaches a LEDES file.
   var blockingIssues = [];
@@ -664,21 +680,21 @@ function generate() {
       dedup.map(function(s) { return '• ' + s; }).join('\n'));
     return;
   }
- 
+
   // FIX: declare allMatterIds as a local variable (was missing, causing ReferenceError)
   var allMatterIds = [];
   var seen = {};
   feeEntries.concat(usptoEntries).forEach(function(e) {
     if (!seen[e.matter_id]) { seen[e.matter_id] = true; allMatterIds.push(e.matter_id); }
   });
- 
+
   generatedFiles = [];
   billedMeta.rows = [];
   var warnings = [], results = [];
   var grandTotal = 0, grandLines = 0, seq = 0;
- 
+
   var HEADER = 'INVOICE_DATE|INVOICE_NUMBER|CLIENT_ID|LAW_FIRM_MATTER_ID|INVOICE_TOTAL|BILLING_START_DATE|BILLING_END_DATE|INVOICE_DESCRIPTION|LINE_ITEM_NUMBER|EXP/FEE/INV_ADJ_TYPE|LINE_ITEM_NUMBER_OF_UNITS|LINE_ITEM_ADJUSTMENT_AMOUNT|LINE_ITEM_TOTAL|LINE_ITEM_DATE|LINE_ITEM_TASK_CODE|LINE_ITEM_EXPENSE_CODE|LINE_ITEM_ACTIVITY_CODE|TIMEKEEPER_ID|LINE_ITEM_DESCRIPTION|LAW_FIRM_ID|LINE_ITEM_UNIT_COST|TIMEKEEPER_NAME|TIMEKEEPER_CLASSIFICATION|CLIENT_MATTER_ID[]';
- 
+
   allMatterIds.forEach(function(mid) {
     var fees   = feeEntries.filter(function(e) { return e.matter_id === mid; });
     var usptof = usptoEntries.filter(function(e) { return e.matter_id === mid; });
@@ -697,7 +713,7 @@ function generate() {
       invDesc = poPrefix + (firstFS ? firstFS.invoice_desc : '');
     }
     var total = 0, lineNum = 0, lines = [];
- 
+
     var isFlat = activeClient && activeClient.flatRate;
     fees.forEach(function(e) {
       var tkId = e.timekeeper_id || defaultTK;
@@ -710,7 +726,7 @@ function generate() {
       } else if (activeClient && activeClient.name.toLowerCase().indexOf('salesforce') >= 0) {
         tkClass = 'FLTFE';
       }
- 
+
       var lineAmt, lineDesc, taskC, actC;
       if (isFlat) {
         // Flat-rate: amount + description come straight from the row
@@ -726,7 +742,7 @@ function generate() {
         taskC    = fs.task_code || '';
         actC     = fs.activity_code || '';
       }
- 
+
       lineNum++; total += lineAmt;
       lines.push([
         fmt(invDate), invNum, ci, prefixedMid, '__T__',
@@ -739,12 +755,12 @@ function generate() {
       ].join('|') + '[]');
       billedMeta.rows.push({ sheet: 'Fees', row: e._row, invNum: invNum });
     });
- 
+
     usptof.forEach(function(e) {
       var expCode  = e.expense_code || 'E112';
       var expAmt   = e.amount;
       var taskCode = '';
- 
+
       // For Salesforce: look up the Fee Schedule by matching description → line_item_desc.
       // This pulls the client-specific expense code (col A), task code (col E), and amount.
       // Falls back to the hardcoded SALESFORCE_CODES array if no Fee Schedule match found.
@@ -764,7 +780,7 @@ function generate() {
           }
         }
       }
- 
+
       lineNum++; total += expAmt;
       lines.push([
         fmt(invDate), invNum, ci, prefixedMid, '__T__',
@@ -777,7 +793,7 @@ function generate() {
       ].join('|') + '[]');
       billedMeta.rows.push({ sheet: 'USPTO Fees', row: e._row, invNum: invNum });
     });
- 
+
     if (!lines.length) return;
     var t = total.toFixed(2);
     var ledesContent = ['LEDES1998B[]', HEADER].concat(lines.map(function(l) { return l.replace('__T__', t); })).join('\n');
@@ -817,33 +833,33 @@ function generate() {
     results.push({ mid: mid, prefixedMid: prefixedMid, invNum: invNum, ci: ci, invDesc: invDesc, feeAmt: feeAmt, usptoAmt: usptoAmt, total: total });
     grandTotal += total; grandLines += lineNum;
   });
- 
+
   if (!generatedFiles.length) return showStatus('gen-status', 'error', 'No valid line items generated.');
- 
+
   document.getElementById('summary').style.display = 'block';
   document.getElementById('dl-btn').style.display = 'inline-block';
   document.getElementById('wb-btn').style.display = 'inline-block';
- 
+
   document.getElementById('summary-stats').innerHTML =
     '<div class="stat"><div class="val">' + generatedFiles.length + '</div><div class="lbl">Files</div></div>' +
     '<div class="stat"><div class="val">' + grandLines + '</div><div class="lbl">Line Items</div></div>' +
     '<div class="stat"><div class="val">$' + money(grandTotal) + '</div><div class="lbl">Grand Total</div></div>' +
     '<div class="stat"><div class="val">' + warnings.length + '</div><div class="lbl">Warnings</div></div>';
- 
+
   var breakdown = '<tr><th>Matter ID</th><th>Invoice #</th><th>Client ID</th><th>Invoice Description</th><th>Flat Fee</th><th>USPTO</th><th>Total</th></tr>';
   results.forEach(function(r) {
     breakdown += '<tr><td>' + r.prefixedMid + '</td><td>' + r.invNum + '</td><td>' + r.ci + '</td><td>' + r.invDesc + '</td><td>$' + money(r.feeAmt) + '</td><td>$' + money(r.usptoAmt) + '</td><td><strong>$' + money(r.total) + '</strong></td></tr>';
   });
   document.getElementById('matter-breakdown').innerHTML = breakdown;
- 
+
   var preview = generatedFiles[0].content.split('\n').slice(0,4).map(function(l) { return l.length > 130 ? l.substring(0,130) + '\u2026' : l; }).join('\n');
   document.getElementById('preview-content').textContent = '&#8212; ' + generatedFiles[0].filename + ' &#8212;\n' + preview;
- 
+
   var msg = generatedFiles.length + ' file(s) ready - $' + money(grandTotal) + ' total.';
   if (warnings.length) msg += '\n' + warnings.map(function(w) { return 'Warning: ' + w; }).join('\n');
   showStatus('gen-status', warnings.length ? 'warn' : 'success', msg);
 }
- 
+
 // ── DOWNLOAD ──────────────────────────────────────────────────
 async function downloadFiles() {
   for (var i = 0; i < generatedFiles.length; i++) {
@@ -861,7 +877,7 @@ async function downloadFiles() {
     }
   }
 }
- 
+
 function buildInvoiceHtml(m) {
   var cur = m.currency || 'USD';
   function fmt(n) { return cur + ' ' + n.toLocaleString('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 }); }
@@ -936,7 +952,7 @@ ${m.poNumber ? '<div class="po-badge">PO# ' + m.poNumber + '</div>' : ''}
 </table>
 </body></html>`;
 }
- 
+
 async function downloadInvoicePdf(meta) {
   var html = buildInvoiceHtml(meta);
   var iframe = document.createElement('iframe');
@@ -961,11 +977,11 @@ async function downloadInvoicePdf(meta) {
   document.body.removeChild(iframe);
   URL.revokeObjectURL(url);
 }
- 
+
 // ── MARK BILLED ───────────────────────────────────────────────
 var OAUTH_CLIENT_ID = '370545972435-0bb6nvm8m9uhtf03ota9n80ah5app5up.apps.googleusercontent.com';
 var OAUTH_SCOPE     = 'https://www.googleapis.com/auth/spreadsheets';
- 
+
 function getOAuthToken(callback) {
   if (oauthToken) { callback(oauthToken); return; }
   var client = google.accounts.oauth2.initTokenClient({
@@ -982,7 +998,7 @@ function getOAuthToken(callback) {
   });
   client.requestAccessToken();
 }
- 
+
 async function markBilled() {
   if (!billedMeta.rows.length) {
     showStatus('gen-status', 'error', 'No generated files to mark — generate first.');
@@ -990,7 +1006,7 @@ async function markBilled() {
   }
   var sid = activeClient ? activeClient.sheetId : '';
   if (!sid) { showStatus('gen-status', 'error', 'No client selected.'); return; }
- 
+
   // Confirm before the irreversible write-back
   var matterCount = {};
   billedMeta.rows.forEach(function(r) { matterCount[r.invNum] = true; });
@@ -1004,13 +1020,13 @@ async function markBilled() {
     showStatus('gen-status', 'info', 'Mark as billed cancelled.');
     return;
   }
- 
+
   showStatus('gen-status', 'info', 'Requesting Google sign-in...');
- 
+
   getOAuthToken(async function(token) {
     showStatus('gen-status', 'info', 'Marking ' + billedMeta.rows.length + ' row(s) as billed...');
     var errors = [];
- 
+
     // First load headers for both tabs so we know which columns to write
     async function getColIndices(tabName) {
       var url = 'https://sheets.googleapis.com/v4/spreadsheets/' + sid +
@@ -1025,17 +1041,17 @@ async function markBilled() {
       var invNumCol  = headers.indexOf('invoice_number');
       return { billedCol: billedCol, invNumCol: invNumCol };
     }
- 
+
     var feesCols  = await getColIndices('Fees');
     var uCols     = await getColIndices('USPTO Fees');
- 
+
     // Build batch update requests
     var requests = [];
     for (var i = 0; i < billedMeta.rows.length; i++) {
       var meta   = billedMeta.rows[i];
       var cols   = meta.sheet === 'Fees' ? feesCols : uCols;
       var rowNum = meta.row;  // 1-based row number
- 
+
       function colLetter(idx) {
         // Convert 0-based column index to A, B, C... Z, AA, AB...
         var s = '';
@@ -1047,7 +1063,7 @@ async function markBilled() {
         }
         return s;
       }
- 
+
       if (cols.billedCol >= 0) {
         requests.push({
           range:  meta.sheet + '!' + colLetter(cols.billedCol) + rowNum,
@@ -1061,7 +1077,7 @@ async function markBilled() {
         });
       }
     }
- 
+
     // Execute as batch
     try {
       var batchUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' + sid + '/values:batchUpdate';
@@ -1088,18 +1104,25 @@ async function markBilled() {
     }
   });
 }
- 
+
 // ── INVOICE HISTORY ───────────────────────────────────────────
 var invoiceHistory = [];   // [{ invNum, date, matters:[], total, lineCount }]
- 
+
 async function loadInvoiceHistory() {
   try {
-    var results = await Promise.all([apiGet('Fees!A:Z'), apiGet('USPTO Fees!A:Z')]);
-    var feesRaw = results[0], usptoRaw = results[1];
- 
+    var isFlatHist = activeClient && activeClient.flatRate;
+    var feesRaw, usptoRaw;
+    if (isFlatHist) {
+      feesRaw = await apiGet('Fees!A:Z');
+      usptoRaw = { values: [] };
+    } else {
+      var results = await Promise.all([apiGet('Fees!A:Z'), apiGet('USPTO Fees!A:Z')]);
+      feesRaw = results[0]; usptoRaw = results[1];
+    }
+
     // invNum -> { total, matters:Set, lineCount, dates:[] }
     var byInv = {};
- 
+
     function addRows(raw, isUspto) {
       var rows = rowsFromRaw(raw);
       if (!rows.length) return;
@@ -1122,10 +1145,10 @@ async function loadInvoiceHistory() {
         if (d) byInv[inv].dates.push(d);
       });
     }
- 
+
     addRows(feesRaw, false);
     addRows(usptoRaw, true);
- 
+
     // Build sorted array — most recent first
     invoiceHistory = Object.keys(byInv).map(function(inv) {
       var rec     = byInv[inv];
@@ -1145,7 +1168,7 @@ async function loadInvoiceHistory() {
       // Sort by invoice number descending (newest first), falling back to string compare
       return b.invNum.localeCompare(a.invNum, undefined, { numeric: true });
     });
- 
+
     if (!invoiceHistory.length) {
       document.getElementById('history-card').style.display = 'none';
       return;
@@ -1157,7 +1180,7 @@ async function loadInvoiceHistory() {
     document.getElementById('history-card').style.display = 'none';
   }
 }
- 
+
 function renderHistory() {
   var filter = (document.getElementById('history-search').value || '').toLowerCase().trim();
   var list = invoiceHistory.filter(function(rec) {
@@ -1165,17 +1188,17 @@ function renderHistory() {
     if (rec.invNum.toLowerCase().indexOf(filter) >= 0) return true;
     return rec.matters.some(function(m) { return m.toLowerCase().indexOf(filter) >= 0; });
   });
- 
+
   var grandTotal = list.reduce(function(s, r) { return s + r.total; }, 0);
   document.getElementById('history-stats').innerHTML =
     '<div class="stat"><div class="val">' + list.length + '</div><div class="lbl">Invoices</div></div>' +
     '<div class="stat"><div class="val">$' + money(grandTotal) + '</div><div class="lbl">Total Billed</div></div>';
- 
+
   function fmtDate(d) {
     if (!d) return '&#8212;';
     return (d.getMonth()+1) + '/' + d.getDate() + '/' + d.getFullYear();
   }
- 
+
   var html = '<tr><th>Invoice #</th><th>Date</th><th>Matter(s)</th><th style="text-align:right">Total</th></tr>';
   if (!list.length) {
     html += '<tr><td colspan="4" style="text-align:center;color:#a0aec0;padding:18px">No invoices match.</td></tr>';
@@ -1190,24 +1213,31 @@ function renderHistory() {
   }
   document.getElementById('history-table').innerHTML = html;
 }
- 
+
 // ── ACCRUALS ──────────────────────────────────────────────────
 function refreshAccruals() {
   if (accrualBaseYear === null) return;
   loadAccruals(accrualBaseYear + accrualYearOffset);
 }
- 
+
 async function loadAccruals(yr) {
   try {
     document.getElementById('accrual-year-label').textContent = yr;
-    var results = await Promise.all([apiGet('Fees!A:Z'), apiGet('USPTO Fees!A:Z')]);
-    var feesRaw = results[0], usptoRaw = results[1];
+    var isFlatAcc = activeClient && activeClient.flatRate;
+    var feesRaw, usptoRaw;
+    if (isFlatAcc) {
+      feesRaw = await apiGet('Fees!A:Z');
+      usptoRaw = { values: [] };
+    } else {
+      var results = await Promise.all([apiGet('Fees!A:Z'), apiGet('USPTO Fees!A:Z')]);
+      feesRaw = results[0]; usptoRaw = results[1];
+    }
     var months = [];
     for (var i = 0; i < 12; i++) months.push(new Date(yr, i, 1).toLocaleString('default', { month: 'short' }));
- 
+
     // acc[matter][month] = { billed: 0, unbilled: 0 }
     var acc = {};
- 
+
     function addRows(raw, isUspto) {
       var rows = rowsFromRaw(raw);
       if (!rows.length) return;
@@ -1217,22 +1247,22 @@ async function loadAccruals(yr) {
       var bcK = isUspto ? null : fk(rows[0], ['billing_code','billing code','code']);
       var dtK = fk(rows[0], ['work_date','work date','date_completed','date completed']);
       var blK = fk(rows[0], ['billed','status','invoiced']);
- 
+
       rows.forEach(function(r) {
         if (!mK || !r[mK]) return;
         var d = parseDate(r[dtK] || '');
         if (!d || d.getFullYear() !== yr) return;
- 
+
         var amt = (isUspto || flatModeA)
           ? (parseFloat(r[amK]) || 0)
           : (feeSchedule[r[bcK] || ''] ? feeSchedule[r[bcK]].amount : 0);
         if (amt === 0) return;
- 
+
         var billedVal = (r[blK] || '').toLowerCase();
         var isBilled  = ['yes','true','✓','x'].indexOf(billedVal) >= 0;
         var mo        = d.getMonth();
         var mid       = r[mK];
- 
+
         if (!acc[mid]) acc[mid] = Array(12).fill(null).map(function() { return { billed: 0, unbilled: 0 }; });
         if (isBilled) {
           acc[mid][mo].billed += amt;
@@ -1241,15 +1271,15 @@ async function loadAccruals(yr) {
         }
       });
     }
- 
+
     addRows(feesRaw, false);
     addRows(usptoRaw, true);
- 
+
     if (!Object.keys(acc).length) {
       document.getElementById('accruals-card').style.display = 'none';
       return;
     }
- 
+
     // Column totals
     var totBilled   = Array(12).fill(0);
     var totUnbilled = Array(12).fill(0);
@@ -1259,19 +1289,19 @@ async function loadAccruals(yr) {
         totUnbilled[i] += cell.unbilled;
       });
     });
- 
+
     function cellHtml(cell) {
       var parts = [];
       if (cell.billed   > 0) parts.push('<span style="color:#276749;display:block">$' + money(cell.billed)   + '</span>');
       if (cell.unbilled > 0) parts.push('<span style="color:#2b6cb0;display:block">$' + money(cell.unbilled) + '</span>');
       return parts.length ? parts.join('') : '<span style="color:#cbd5e0">&#8212;</span>';
     }
- 
+
     var html = '<div style="overflow-x:auto"><table>';
     html += '<tr><th>Matter</th>';
     months.forEach(function(m) { html += '<th style="text-align:right">' + m + '</th>'; });
     html += '<th style="text-align:right">YTD Billed</th><th style="text-align:right">YTD Unbilled</th></tr>';
- 
+
     Object.keys(acc).sort().forEach(function(mid) {
       var a = acc[mid];
       var ytdBilled   = a.reduce(function(s,c) { return s + c.billed;   }, 0);
@@ -1282,7 +1312,7 @@ async function loadAccruals(yr) {
       html += '<td style="text-align:right"><strong style="color:#2b6cb0">$' + money(ytdUnbilled) + '</strong></td>';
       html += '</tr>';
     });
- 
+
     // Totals row
     html += '<tr style="background:#edf2f7;font-weight:700"><td>Total</td>';
     for (var i = 0; i < 12; i++) {
@@ -1296,16 +1326,16 @@ async function loadAccruals(yr) {
     html += '<td style="text-align:right"><strong style="color:#276749">$' + money(grandBilled)   + '</strong></td>';
     html += '<td style="text-align:right"><strong style="color:#2b6cb0">$' + money(grandUnbilled) + '</strong></td>';
     html += '</tr></table></div>';
- 
+
     document.getElementById('accruals-card').style.display = 'block';
     document.getElementById('accruals-content').innerHTML = html;
- 
+
   } catch(e) {
     console.error('Accruals error:', e);
     document.getElementById('accruals-card').style.display = 'none';
   }
 }
- 
+
 // ── SALESFORCE EXPENSE CODES ──────────────────────────────────
 var SALESFORCE_CODES = [
   { keywords: ['provisional application filing fee'],                code: 'X900', amount: null },
@@ -1358,7 +1388,7 @@ var SALESFORCE_CODES = [
   { keywords: ['translation'],                                       code: 'X139', amount: null },
   { keywords: ['drawing'],                                           code: 'X200', amount: null },
 ];
- 
+
 function getSalesforceCode(description) {
   var desc = description.toLowerCase();
   var best = null;
@@ -1372,10 +1402,10 @@ function getSalesforceCode(description) {
   });
   return best || null;
 }
- 
+
 window.addEventListener('DOMContentLoaded', function() {
   loadClients();
- 
+
   // Hardcoded default clients — added automatically if not already saved
   var defaultClients = [
     {
@@ -1426,7 +1456,7 @@ window.addEventListener('DOMContentLoaded', function() {
       tkClassOverride: "PARTNR"     // timekeeper classification for all Cisco lines
     }
   ];
- 
+
   // Only add if a client with that name does not already exist
   var changed = false;
   defaultClients.forEach(function(dc) {
@@ -1437,7 +1467,7 @@ window.addEventListener('DOMContentLoaded', function() {
     }
   });
   if (changed) saveClients();
- 
+
   renderDropdown();
 });
 </script>
