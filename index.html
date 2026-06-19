@@ -1457,17 +1457,37 @@ window.addEventListener('DOMContentLoaded', function() {
     }
   ];
 
-  // Only add if a client with that name does not already exist
-  var changed = false;
+  // Reconcile clients with hardcoded defaults:
+  //  - de-duplicate any repeated client names (keep first occurrence)
+  //  - ensure every default client is present
+  //  - refresh default clients' config to match the latest hardcoded values
+  var seenNames = {};
+  var deduped = [];
+  clients.forEach(function(c) {
+    var key = (c.name || '').toLowerCase().trim();
+    if (!key || seenNames[key]) return;   // drop blanks and duplicates
+    seenNames[key] = true;
+    deduped.push(c);
+  });
+
   defaultClients.forEach(function(dc) {
-    var exists = clients.some(function(c) { return c.name === dc.name; });
-    if (!exists) {
-      clients.push(dc);
-      changed = true;
+    var key = dc.name.toLowerCase().trim();
+    if (seenNames[key]) {
+      // Replace the existing saved copy with the up-to-date default config
+      for (var i = 0; i < deduped.length; i++) {
+        if ((deduped[i].name || '').toLowerCase().trim() === key) {
+          deduped[i] = dc;
+          break;
+        }
+      }
+    } else {
+      deduped.push(dc);
+      seenNames[key] = true;
     }
   });
-  if (changed) saveClients();
 
+  clients = deduped;
+  saveClients();
   renderDropdown();
 });
 </script>
