@@ -224,6 +224,7 @@ var billedMeta = { feesHeaders: [], usptoHeaders: [], rows: [] };
 var clients = [];
 var activeClient = null;
 var oauthToken = null;   // Google OAuth access token for sheet write-back
+var billedSummary = [];  // per-invoice summary rows for the Billed Summary tab
 
 // ── CLIENT MANAGEMENT ─────────────────────────────────────────
 function loadClients() {
@@ -690,6 +691,7 @@ function generate() {
 
   generatedFiles = [];
   billedMeta.rows = [];
+  billedSummary = [];
   var warnings = [], results = [];
   var grandTotal = 0, grandLines = 0, seq = 0;
 
@@ -800,6 +802,9 @@ function generate() {
     generatedFiles.push({
       filename:   'LEDES_' + invNum + '.txt',
       content:    ledesContent,
+      matterId:   mid,     // for Drive folder lookup
+      clientId:   ci,      // for Drive folder lookup ({clientId}-{matterId} prefix)
+      invNum:     invNum,
       // PDF metadata — populated if client requires a PDF invoice
       pdfMeta: (activeClient && activeClient.requiresPdf) ? {
         invNum:     invNum,
@@ -831,6 +836,8 @@ function generate() {
     }, 0);
     var usptoAmt = usptof.reduce(function(s,e) { return s + e.amount; }, 0);
     results.push({ mid: mid, prefixedMid: prefixedMid, invNum: invNum, ci: ci, invDesc: invDesc, feeAmt: feeAmt, usptoAmt: usptoAmt, total: total });
+    // Per-invoice summary row for the Billed Summary tab (written on Mark as Billed)
+    billedSummary.push({ invNum: invNum, invDate: invDate, clientId: ci, matter: prefixedMid, total: total });
     grandTotal += total; grandLines += lineNum;
   });
 
@@ -980,7 +987,9 @@ async function downloadInvoicePdf(meta) {
 
 // ── MARK BILLED ───────────────────────────────────────────────
 var OAUTH_CLIENT_ID = '370545972435-0bb6nvm8m9uhtf03ota9n80ah5app5up.apps.googleusercontent.com';
-var OAUTH_SCOPE     = 'https://www.googleapis.com/auth/spreadsheets';
+var DRIVE_ROOT_ID   = '0ADbaDtwjdDiGUk9PVA';  // shared drive containing all client/matter folders
+var PAYMENTS_FOLDER_NAME = '07 Payments';
+var OAUTH_SCOPE     = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive';
 
 function getOAuthToken(callback) {
   if (oauthToken) { callback(oauthToken); return; }
@@ -1095,14 +1104,203 @@ async function markBilled() {
       });
       var result = await resp.json();
       if (result.error) throw new Error(result.error.message);
-      showStatus('gen-status', 'success',
-        'Marked ' + billedMeta.rows.length + ' row(s) as billed and wrote invoice numbers.');
+
+      // Append per-invoice rows to the Billed Summary tab
+      try {
+        await writeBilledSummary(sid, token);
+      } catch(sumErr) {
+        showStatus('gen-status', 'warn',
+          'Marked rows as billed, but the Billed Summary tab update failed: ' + sumErr.message);
+        document.getElementById('wb-btn').style.display = 'none';
+        return;
+      }
+
+      // Upload each LEDES file to its matter's "07 Payments" folder in Drive
+      var driveResults = { ok: 0, failed: [] };
+      try {
+        driveResults = await uploadLedesToDrive(token);
+      } catch(driveErr) {
+        driveResults.failed.push('Drive upload error: ' + driveErr.message);
+      }
+
+      var baseMsg = 'Marked ' + billedMeta.rows.length + ' row(s) as billed, wrote invoice numbers, and updated the Billed Summary tab.';
+      if (driveResults.ok > 0) {
+        baseMsg += ' Saved ' + driveResults.ok + ' LEDES file(s) to Drive.';
+      }
+      if (driveResults.failed.length) {
+        showStatus('gen-status', 'warn', baseMsg + '\n\nSome Drive uploads did not complete:\n' +
+          driveResults.failed.map(function(s) { return '• ' + s; }).join('\n'));
+        document.getElementById('wb-btn').style.display = 'none';
+        return;
+      }
+      showStatus('gen-status', 'success', baseMsg);
       // Hide the button so it can't be clicked twice
       document.getElementById('wb-btn').style.display = 'none';
     } catch(e) {
       showStatus('gen-status', 'error', 'Write-back failed: ' + e.message);
     }
   });
+}
+
+// Ensure the "Billed Summary" tab exists (create if missing), then append summary rows.
+async function writeBilledSummary(sid, token) {
+  if (!billedSummary.length) return;
+  var TAB = 'Billed Summary';
+
+  // 1. Check whether the tab already exists
+  var metaResp = await fetch(
+    'https://sheets.googleapis.com/v4/spreadsheets/' + sid +
+    '?fields=sheets.properties.title',
+    { headers: { 'Authorization': 'Bearer ' + token } }
+  );
+  var meta = await metaResp.json();
+  if (meta.error) throw new Error(meta.error.message);
+  var titles = (meta.sheets || []).map(function(s) { return s.properties.title; });
+  var exists = titles.indexOf(TAB) >= 0;
+
+  // 2. Create the tab + header row if missing
+  if (!exists) {
+    var addResp = await fetch(
+      'https://sheets.googleapis.com/v4/spreadsheets/' + sid + ':batchUpdate',
+      {
+        method:  'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requests: [{ addSheet: { properties: { title: TAB } } }] })
+      }
+    );
+    var addResult = await addResp.json();
+    if (addResult.error) throw new Error(addResult.error.message);
+
+    // Write header row
+    var hdrResp = await fetch(
+      'https://sheets.googleapis.com/v4/spreadsheets/' + sid +
+      '/values/' + encodeURIComponent(TAB + '!A1') + ':append?valueInputOption=USER_ENTERED',
+      {
+        method:  'POST',
+        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: [['Invoice Number', 'Date', 'Client ID', 'Matter', 'Total']] })
+      }
+    );
+    var hdrResult = await hdrResp.json();
+    if (hdrResult.error) throw new Error(hdrResult.error.message);
+  }
+
+  // 3. Append one row per invoice
+  function fmtDate(d) {
+    if (!d) return '';
+    var p = d.split('-');
+    return p.length === 3 ? (parseInt(p[1]) + '/' + parseInt(p[2]) + '/' + p[0]) : d;
+  }
+  var rows = billedSummary.map(function(s) {
+    return [s.invNum, fmtDate(s.invDate), s.clientId, s.matter, s.total.toFixed(2)];
+  });
+
+  var appendResp = await fetch(
+    'https://sheets.googleapis.com/v4/spreadsheets/' + sid +
+    '/values/' + encodeURIComponent(TAB + '!A1') + ':append?valueInputOption=USER_ENTERED',
+    {
+      method:  'POST',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: rows })
+    }
+  );
+  var appendResult = await appendResp.json();
+  if (appendResult.error) throw new Error(appendResult.error.message);
+}
+
+// ── DRIVE UPLOAD ──────────────────────────────────────────────
+// Search the shared drive for a folder whose name starts with a given prefix.
+async function driveFindFolderByPrefix(prefix, token) {
+  // Escape single quotes for the Drive query
+  var safe = prefix.replace(/'/g, "\\'");
+  var q = "mimeType='application/vnd.google-apps.folder' and name contains '" + safe + "' and trashed=false";
+  var url = 'https://www.googleapis.com/drive/v3/files'
+          + '?q=' + encodeURIComponent(q)
+          + '&corpora=drive'
+          + '&driveId=' + DRIVE_ROOT_ID
+          + '&includeItemsFromAllDrives=true'
+          + '&supportsAllDrives=true'
+          + '&fields=' + encodeURIComponent('files(id,name)');
+  var resp = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+  var data = await resp.json();
+  if (data.error) throw new Error(data.error.message);
+  var files = data.files || [];
+  // "name contains" can match mid-string; keep only true starts-with matches
+  var matches = files.filter(function(f) { return f.name.indexOf(prefix) === 0; });
+  return matches.length ? matches[0] : null;
+}
+
+// Find a subfolder by exact name inside a parent folder.
+async function driveFindChildFolder(parentId, name, token) {
+  var safe = name.replace(/'/g, "\\'");
+  var q = "mimeType='application/vnd.google-apps.folder' and name='" + safe + "' and '"
+        + parentId + "' in parents and trashed=false";
+  var url = 'https://www.googleapis.com/drive/v3/files'
+          + '?q=' + encodeURIComponent(q)
+          + '&corpora=drive'
+          + '&driveId=' + DRIVE_ROOT_ID
+          + '&includeItemsFromAllDrives=true'
+          + '&supportsAllDrives=true'
+          + '&fields=' + encodeURIComponent('files(id,name)');
+  var resp = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+  var data = await resp.json();
+  if (data.error) throw new Error(data.error.message);
+  var files = data.files || [];
+  return files.length ? files[0] : null;
+}
+
+// Upload a text file into a specific Drive folder (multipart upload).
+async function driveUploadTextFile(folderId, filename, contentStr, token) {
+  var metadata = { name: filename, parents: [folderId] };
+  var boundary = '-------ledes' + Date.now();
+  var body =
+    '--' + boundary + '\r\n' +
+    'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+    JSON.stringify(metadata) + '\r\n' +
+    '--' + boundary + '\r\n' +
+    'Content-Type: text/plain\r\n\r\n' +
+    contentStr + '\r\n' +
+    '--' + boundary + '--';
+  var resp = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true',
+    {
+      method:  'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type':  'multipart/related; boundary=' + boundary
+      },
+      body: body
+    }
+  );
+  var data = await resp.json();
+  if (data.error) throw new Error(data.error.message);
+  return data;
+}
+
+// For every generated LEDES file, find its matter's "07 Payments" folder and upload.
+async function uploadLedesToDrive(token) {
+  var results = { ok: 0, failed: [] };
+  for (var i = 0; i < generatedFiles.length; i++) {
+    var f = generatedFiles[i];
+    var prefix = (f.clientId || '') + '-' + (f.matterId || '');   // e.g. 000111-0006
+    try {
+      var matterFolder = await driveFindFolderByPrefix(prefix, token);
+      if (!matterFolder) {
+        results.failed.push('No matter folder found starting with "' + prefix + '" (' + f.filename + ')');
+        continue;
+      }
+      var payments = await driveFindChildFolder(matterFolder.id, PAYMENTS_FOLDER_NAME, token);
+      if (!payments) {
+        results.failed.push('"' + PAYMENTS_FOLDER_NAME + '" subfolder not found in "' + matterFolder.name + '" (' + f.filename + ')');
+        continue;
+      }
+      await driveUploadTextFile(payments.id, f.filename, f.content, token);
+      results.ok++;
+    } catch(e) {
+      results.failed.push(f.filename + ': ' + e.message);
+    }
+  }
+  return results;
 }
 
 // ── INVOICE HISTORY ───────────────────────────────────────────
