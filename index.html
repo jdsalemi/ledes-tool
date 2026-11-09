@@ -421,11 +421,18 @@ async function connectSheet() {
     var actual = (meta.sheets || []).map(function(s) { return s.properties.title.trim().toLowerCase(); });
     // Flat-rate clients only need Fees + Timekeepers; others need all four.
     var isFlat = activeClient && activeClient.flatRate;
-    var tabs = isFlat
-      ? [['Fees','pill-fees'],['Timekeepers','pill-timekeepers']]
-      : [['Fees','pill-fees'],['USPTO Fees','pill-uspto'],['Fee Schedule','pill-schedule'],['Timekeepers','pill-timekeepers']];
+    var flatUspto = activeClient && activeClient.hasUsptoFees;
+    var tabs;
+    if (isFlat && flatUspto) {
+      // Flat-rate + USPTO fees: Fees, USPTO Fees, Timekeepers (no Fee Schedule)
+      tabs = [['Fees','pill-fees'],['USPTO Fees','pill-uspto'],['Timekeepers','pill-timekeepers']];
+    } else if (isFlat) {
+      tabs = [['Fees','pill-fees'],['Timekeepers','pill-timekeepers']];
+    } else {
+      tabs = [['Fees','pill-fees'],['USPTO Fees','pill-uspto'],['Fee Schedule','pill-schedule'],['Timekeepers','pill-timekeepers']];
+    }
     // Hide the pills this client doesn't use
-    document.getElementById('pill-uspto').style.display    = isFlat ? 'none' : '';
+    document.getElementById('pill-uspto').style.display    = (isFlat && !flatUspto) ? 'none' : '';
     document.getElementById('pill-schedule').style.display = isFlat ? 'none' : '';
     var allOk = true;
     tabs.forEach(function(t) {
@@ -454,12 +461,19 @@ async function loadAndPreview() {
 
   try {
     var isFlatClient = activeClient && activeClient.flatRate;
+    var flatHasUspto = activeClient && activeClient.hasUsptoFees;
     var empty = { values: [] };
     var feesRaw, usptoRaw, schedRaw, tkRaw;
     if (isFlatClient) {
-      // Flat-rate clients only have Fees + Timekeepers tabs
-      var fr = await Promise.all([apiGet('Fees!A:Z'), apiGet('Timekeepers!A:Z')]);
-      feesRaw = fr[0]; tkRaw = fr[1]; usptoRaw = empty; schedRaw = empty;
+      // Flat-rate clients have Fees + Timekeepers; some also have USPTO Fees.
+      // They never have a Fee Schedule tab.
+      if (flatHasUspto) {
+        var frU = await Promise.all([apiGet('Fees!A:Z'), apiGet('USPTO Fees!A:Z'), apiGet('Timekeepers!A:Z')]);
+        feesRaw = frU[0]; usptoRaw = frU[1]; tkRaw = frU[2]; schedRaw = empty;
+      } else {
+        var fr = await Promise.all([apiGet('Fees!A:Z'), apiGet('Timekeepers!A:Z')]);
+        feesRaw = fr[0]; tkRaw = fr[1]; usptoRaw = empty; schedRaw = empty;
+      }
     } else {
       var results = await Promise.all([
         apiGet('Fees!A:Z'), apiGet('USPTO Fees!A:Z'),
@@ -1326,8 +1340,9 @@ var invoiceHistory = [];   // [{ invNum, date, matters:[], total, lineCount }]
 async function loadInvoiceHistory() {
   try {
     var isFlatHist = activeClient && activeClient.flatRate;
+    var histHasUspto = activeClient && activeClient.hasUsptoFees;
     var feesRaw, usptoRaw;
-    if (isFlatHist) {
+    if (isFlatHist && !histHasUspto) {
       feesRaw = await apiGet('Fees!A:Z');
       usptoRaw = { values: [] };
     } else {
@@ -1439,8 +1454,9 @@ async function loadAccruals(yr) {
   try {
     document.getElementById('accrual-year-label').textContent = yr;
     var isFlatAcc = activeClient && activeClient.flatRate;
+    var accHasUspto = activeClient && activeClient.hasUsptoFees;
     var feesRaw, usptoRaw;
-    if (isFlatAcc) {
+    if (isFlatAcc && !accHasUspto) {
       feesRaw = await apiGet('Fees!A:Z');
       usptoRaw = { values: [] };
     } else {
@@ -1668,7 +1684,8 @@ window.addEventListener('DOMContentLoaded', function() {
       flatRate:       true,         // reads amount + description directly from each row
       flatTaskCode:   "PA299",      // task code applied to every flat-rate line
       flatActivityCode: "A104",     // activity code applied to every flat-rate line
-      tkClassOverride: "PARTNR"     // timekeeper classification for all Cisco lines
+      tkClassOverride: "PARTNR",    // timekeeper classification for all Cisco lines
+      hasUsptoFees:   true          // flat-rate client that ALSO has USPTO fees
     }
   ];
 
