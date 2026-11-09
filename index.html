@@ -576,23 +576,40 @@ async function loadAndPreview() {
     var schedKeys = Object.keys(feeSchedule);
     var html = '<div style="margin:14px 0 6px;font-size:0.85rem;color:#4a5568">Loaded all unbilled rows (invoicing in <strong>' + monthLabel + '</strong>)</div>';
 
-    html += '<div class="section-title">Fee Schedule (' + schedKeys.length + ' codes)</div><div style="overflow-x:auto"><table><tr><th>Code</th><th>Invoice Description</th><th>Line Item Description</th><th>Amount</th></tr>';
-    schedKeys.slice(0,6).forEach(function(code) {
-      var fs = feeSchedule[code];
-      html += '<tr><td><strong>' + code + '</strong></td><td>' + (fs.invoice_desc || '<span style="color:red">EMPTY</span>') + '</td><td>' + (fs.line_item_desc || '').substring(0,40) + '</td><td>$' + money(fs.amount) + '</td></tr>';
-    });
-    html += '</table></div>';
-
-    if (feeEntries.length) {
-      html += '<div class="section-title" style="margin-top:14px">Fees (' + feeEntries.length + ' rows)</div><div style="overflow-x:auto"><table><tr><th>Matter ID</th><th>Client ID</th><th>Billing Code</th><th>Invoice Desc</th><th>Amount</th><th>Work Date</th><th>TK</th><th>Ref</th></tr>';
-      feeEntries.forEach(function(r) {
-        var fs    = feeSchedule[r.billing_code];
-        var refHtml = r.reference_url
-          ? '<a href="' + r.reference_url + '" target="_blank" title="Open verification email/doc" style="color:#2b6cb0;text-decoration:none;font-size:1.1rem">&#128279;</a>'
-          : '<span style="color:#cbd5e0">&#8212;</span>';
-        html += '<tr><td>' + r.matter_id + '</td><td>' + r.client_id + '</td><td><strong>' + r.billing_code + '</strong></td><td>' + (fs ? fs.invoice_desc || '<span style="color:orange">Empty</span>' : '<span style="color:red">Not found</span>') + '</td><td>' + (fs ? '$' + money(fs.amount) : '&#8212;') + '</td><td>' + (r.work_date || '&#8212;') + '</td><td>' + (r.timekeeper_id || '(default)') + '</td><td style="text-align:center">' + refHtml + '</td></tr>';
+    // Flat-rate clients have no Fee Schedule — skip that preview section entirely
+    if (!(activeClient && activeClient.flatRate)) {
+      html += '<div class="section-title">Fee Schedule (' + schedKeys.length + ' codes)</div><div style="overflow-x:auto"><table><tr><th>Code</th><th>Invoice Description</th><th>Line Item Description</th><th>Amount</th></tr>';
+      schedKeys.slice(0,6).forEach(function(code) {
+        var fs = feeSchedule[code];
+        html += '<tr><td><strong>' + code + '</strong></td><td>' + (fs.invoice_desc || '<span style="color:red">EMPTY</span>') + '</td><td>' + (fs.line_item_desc || '').substring(0,40) + '</td><td>$' + money(fs.amount) + '</td></tr>';
       });
       html += '</table></div>';
+    }
+
+    if (feeEntries.length) {
+      var isFlatPreview = activeClient && activeClient.flatRate;
+      if (isFlatPreview) {
+        // Flat-rate preview: show Description + Amount read directly from the row
+        html += '<div class="section-title" style="margin-top:14px">Fees (' + feeEntries.length + ' rows, flat-rate)</div><div style="overflow-x:auto"><table><tr><th>Matter ID</th><th>Client ID</th><th>Description</th><th>Amount</th><th>Work Date</th><th>TK</th></tr>';
+        feeEntries.forEach(function(r) {
+          var amtOk = r.flat_amount > 0;
+          html += '<tr><td>' + r.matter_id + '</td><td>' + r.client_id + '</td><td>' +
+                  (r.flat_desc || '<span style="color:orange">(no description)</span>') + '</td><td>' +
+                  (amtOk ? '$' + money(r.flat_amount) : '<span style="color:red">$0.00</span>') + '</td><td>' +
+                  (r.work_date || '&#8212;') + '</td><td>' + (r.timekeeper_id || '(default)') + '</td></tr>';
+        });
+        html += '</table></div>';
+      } else {
+        html += '<div class="section-title" style="margin-top:14px">Fees (' + feeEntries.length + ' rows)</div><div style="overflow-x:auto"><table><tr><th>Matter ID</th><th>Client ID</th><th>Billing Code</th><th>Invoice Desc</th><th>Amount</th><th>Work Date</th><th>TK</th><th>Ref</th></tr>';
+        feeEntries.forEach(function(r) {
+          var fs    = feeSchedule[r.billing_code];
+          var refHtml = r.reference_url
+            ? '<a href="' + r.reference_url + '" target="_blank" title="Open verification email/doc" style="color:#2b6cb0;text-decoration:none;font-size:1.1rem">&#128279;</a>'
+            : '<span style="color:#cbd5e0">&#8212;</span>';
+          html += '<tr><td>' + r.matter_id + '</td><td>' + r.client_id + '</td><td><strong>' + r.billing_code + '</strong></td><td>' + (fs ? fs.invoice_desc || '<span style="color:orange">Empty</span>' : '<span style="color:red">Not found</span>') + '</td><td>' + (fs ? '$' + money(fs.amount) : '&#8212;') + '</td><td>' + (r.work_date || '&#8212;') + '</td><td>' + (r.timekeeper_id || '(default)') + '</td><td style="text-align:center">' + refHtml + '</td></tr>';
+        });
+        html += '</table></div>';
+      }
     } else {
       html += '<div class="msg msg-warn" style="margin-top:12px">No unbilled fee rows found for ' + monthLabel + '. Check Work Date format and Billed column.</div>';
     }
