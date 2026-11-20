@@ -726,7 +726,57 @@ function generate() {
   var warnings = [], results = [];
   var grandTotal = 0, grandLines = 0, seq = 0;
 
-  var HEADER = 'INVOICE_DATE|INVOICE_NUMBER|CLIENT_ID|LAW_FIRM_MATTER_ID|INVOICE_TOTAL|BILLING_START_DATE|BILLING_END_DATE|INVOICE_DESCRIPTION|LINE_ITEM_NUMBER|EXP/FEE/INV_ADJ_TYPE|LINE_ITEM_NUMBER_OF_UNITS|LINE_ITEM_ADJUSTMENT_AMOUNT|LINE_ITEM_TOTAL|LINE_ITEM_DATE|LINE_ITEM_TASK_CODE|LINE_ITEM_EXPENSE_CODE|LINE_ITEM_ACTIVITY_CODE|TIMEKEEPER_ID|LINE_ITEM_DESCRIPTION|LAW_FIRM_ID|LINE_ITEM_UNIT_COST|TIMEKEEPER_NAME|TIMEKEEPER_CLASSIFICATION|CLIENT_MATTER_ID[]';
+  var is98BIv2 = activeClient && activeClient.ledesFormat === '1998BIv2';
+
+  var HEADER_1998B = 'INVOICE_DATE|INVOICE_NUMBER|CLIENT_ID|LAW_FIRM_MATTER_ID|INVOICE_TOTAL|BILLING_START_DATE|BILLING_END_DATE|INVOICE_DESCRIPTION|LINE_ITEM_NUMBER|EXP/FEE/INV_ADJ_TYPE|LINE_ITEM_NUMBER_OF_UNITS|LINE_ITEM_ADJUSTMENT_AMOUNT|LINE_ITEM_TOTAL|LINE_ITEM_DATE|LINE_ITEM_TASK_CODE|LINE_ITEM_EXPENSE_CODE|LINE_ITEM_ACTIVITY_CODE|TIMEKEEPER_ID|LINE_ITEM_DESCRIPTION|LAW_FIRM_ID|LINE_ITEM_UNIT_COST|TIMEKEEPER_NAME|TIMEKEEPER_CLASSIFICATION|CLIENT_MATTER_ID[]';
+
+  var HEADER_1998BIv2 = 'INVOICE_DATE|INVOICE_NUMBER|CLIENT_ID|LAW_FIRM_MATTER_ID|INVOICE_TOTAL|BILLING_START_DATE|BILLING_END_DATE|INVOICE_DESCRIPTION|LINE_ITEM_NUMBER|EXP/FEE/INV_ADJ_TYPE|LINE_ITEM_NUMBER_OF_UNITS|LINE_ITEM_ADJUSTMENT_AMOUNT|LINE_ITEM_TOTAL|LINE_ITEM_DATE|LINE_ITEM_TASK_CODE|LINE_ITEM_EXPENSE_CODE|LINE_ITEM_ACTIVITY_CODE|TIMEKEEPER_ID|LINE_ITEM_DESCRIPTION|LAW_FIRM_ID|LINE_ITEM_UNIT_COST|TIMEKEEPER_NAME|TIMEKEEPER_CLASSIFICATION|CLIENT_MATTER_ID|PO_NUMBER|CLIENT_TAX_ID|MATTER_NAME|INVOICE_TAX_TOTAL|INVOICE_NET_TOTAL|INVOICE_CURRENCY|TIMEKEEPER_LAST_NAME|TIMEKEEPER_FIRST_NAME|ACCOUNT_TYPE|LAW_FIRM_NAME|LAW_FIRM_ADDRESS_1|LAW_FIRM_ADDRESS_2|LAW_FIRM_CITY|LAW_FIRM_STATEorREGION|LAW_FIRM_POSTCODE|LAW_FIRM_COUNTRY|CLIENT_NAME|CLIENT_ADDRESS_1|CLIENT_ADDRESS_2|CLIENT_CITY|CLIENT_STATEorREGION|CLIENT_POSTCODE|CLIENT_COUNTRY|LINE_ITEM_TAX_RATE|LINE_ITEM_TAX_TOTAL|LINE_ITEM_TAX_TYPE|INVOICE_REPORTED_TAX_TOTAL|INVOICE_TAX_CURRENCY[]';
+
+  var HEADER = is98BIv2 ? HEADER_1998BIv2 : HEADER_1998B;
+
+  // Build the 29 extra 1998BI V2 fields for a line. Placeholders __T__ (invoice total)
+  // are filled later. Fields needing per-line values (tk names, matter name) passed in.
+  function extra98BIv2Fields(tkLast, tkFirst, matterName) {
+    var ac = activeClient;
+    return [
+      '',                    // PO_NUMBER
+      '',                    // CLIENT_TAX_ID
+      matterName,            // MATTER_NAME
+      '0.00',                // INVOICE_TAX_TOTAL
+      '__T__',               // INVOICE_NET_TOTAL (= invoice total)
+      'USD',                 // INVOICE_CURRENCY
+      tkLast,                // TIMEKEEPER_LAST_NAME
+      tkFirst,               // TIMEKEEPER_FIRST_NAME
+      ac.accountType || 'O', // ACCOUNT_TYPE
+      ac.lf_name || '',      // LAW_FIRM_NAME
+      ac.lf_addr1 || '',     // LAW_FIRM_ADDRESS_1
+      ac.lf_addr2 || '',     // LAW_FIRM_ADDRESS_2
+      ac.lf_city || '',      // LAW_FIRM_CITY
+      ac.lf_state || '',     // LAW_FIRM_STATEorREGION
+      ac.lf_postcode || '',  // LAW_FIRM_POSTCODE
+      ac.lf_country || '',   // LAW_FIRM_COUNTRY
+      ac.cl_name || '',      // CLIENT_NAME
+      ac.cl_addr1 || '',     // CLIENT_ADDRESS_1
+      ac.cl_addr2 || '',     // CLIENT_ADDRESS_2
+      ac.cl_city || '',      // CLIENT_CITY
+      ac.cl_state || '',     // CLIENT_STATEorREGION
+      ac.cl_postcode || '',  // CLIENT_POSTCODE
+      ac.cl_country || '',   // CLIENT_COUNTRY
+      '0.000000',            // LINE_ITEM_TAX_RATE
+      '0.00',                // LINE_ITEM_TAX_TOTAL
+      'Exempt',              // LINE_ITEM_TAX_TYPE
+      '0.00',                // INVOICE_REPORTED_TAX_TOTAL
+      'USD'                  // INVOICE_TAX_CURRENCY
+    ];
+  }
+
+  // Split "First Last" into {first, last}; last word is surname.
+  function splitName(full) {
+    var parts = (full || '').trim().split(/\s+/);
+    if (parts.length === 0 || parts[0] === '') return { first: '', last: '' };
+    if (parts.length === 1) return { first: parts[0], last: '' };
+    return { first: parts.slice(0, -1).join(' '), last: parts[parts.length - 1] };
+  }
 
   allMatterIds.forEach(function(mid) {
     var fees   = feeEntries.filter(function(e) { return e.matter_id === mid; });
@@ -777,15 +827,24 @@ function generate() {
       }
 
       lineNum++; total += lineAmt;
-      lines.push([
+      var nmF = splitName(tk.name);
+      var tkDisplay = is98BIv2
+        ? (nmF.last ? nmF.last + ', ' + nmF.first : tk.name)   // "Last, First" for 98BI V2
+        : tk.name;
+      var adjField = is98BIv2 ? '0.00' : '';
+      var feeLine = [
         fmt(invDate), invNum, ci, prefixedMid, '__T__',
         fmt(billStart), fmt(billEnd), invDesc,
-        lineNum, 'F', '1', '', lineAmt.toFixed(2),
+        lineNum, 'F', '1', adjField, lineAmt.toFixed(2),
         fmt(e.work_date) || fmt(invDate),
         taskC, '', actC,
         tkId, lineDesc, lfmid,
-        lineAmt.toFixed(2), tk.name, tkClass, cm
-      ].join('|') + '[]');
+        lineAmt.toFixed(2), tkDisplay, tkClass, cm
+      ];
+      if (is98BIv2) {
+        feeLine = feeLine.concat(extra98BIv2Fields(nmF.last, nmF.first, invDesc));
+      }
+      lines.push(feeLine.join('|') + '[]');
       billedMeta.rows.push({ sheet: 'Fees', row: e._row, invNum: invNum });
     });
 
@@ -815,21 +874,28 @@ function generate() {
       }
 
       lineNum++; total += expAmt;
-      lines.push([
+      var adjFieldE = is98BIv2 ? '0.00' : '';
+      var expLine = [
         fmt(invDate), invNum, ci, prefixedMid, '__T__',
         fmt(billStart), fmt(billEnd), invDesc,
-        lineNum, 'E', '1', '', expAmt.toFixed(2),
+        lineNum, 'E', '1', adjFieldE, expAmt.toFixed(2),
         fmt(e.work_date) || fmt(invDate),
         taskCode, expCode, '',
         '', e.description, lfmid,
         expAmt.toFixed(2), '', '', cm
-      ].join('|') + '[]');
+      ];
+      if (is98BIv2) {
+        // Expense lines have no timekeeper name
+        expLine = expLine.concat(extra98BIv2Fields('', '', invDesc));
+      }
+      lines.push(expLine.join('|') + '[]');
       billedMeta.rows.push({ sheet: 'USPTO Fees', row: e._row, invNum: invNum });
     });
 
     if (!lines.length) return;
     var t = total.toFixed(2);
-    var ledesContent = ['LEDES1998B[]', HEADER].concat(lines.map(function(l) { return l.replace('__T__', t); })).join('\n');
+    var identifier = is98BIv2 ? 'LEDES98BI V2[]' : 'LEDES1998B[]';
+    var ledesContent = [identifier, HEADER].concat(lines.map(function(l) { return l.split('__T__').join(t); })).join('\n');
     generatedFiles.push({
       filename:   'LEDES_' + invNum + '.txt',
       content:    ledesContent,
@@ -1667,9 +1733,25 @@ window.addEventListener('DOMContentLoaded', function() {
       defaultCid:     "000117",
       firmName:       "Landfall IP",
       firmAddr:       "1495 Canyon Blvd. Boulder, CO 80302",
-      clientAddr:     "Coinbase, Inc. 248 3rd St. #434, Oakland, CA 94607",
+      clientAddr:     "Coinbase Global, Inc. 248 3rd St. #434, Oakland, CA 94607",
       requiresPdf:    true,
-      matterIdPrefix: ""
+      matterIdPrefix: "",
+      ledesFormat:    "1998BIv2",   // Coinbase requires LEDES 98BI V2 (53 fields)
+      lf_name:        "Landfall IP, LLC",
+      lf_addr1:       "1495 Canyon Blvd",
+      lf_addr2:       "",
+      lf_city:        "Boulder",
+      lf_state:       "CO",
+      lf_postcode:    "80302",
+      lf_country:     "US",
+      cl_name:        "Coinbase Global, Inc.",
+      cl_addr1:       "248 3rd St",
+      cl_addr2:       "#434",
+      cl_city:        "Oakland",
+      cl_state:       "CA",
+      cl_postcode:    "94607",
+      cl_country:     "US",
+      accountType:    "O"
     },
     {
       name:           "Cisco",
